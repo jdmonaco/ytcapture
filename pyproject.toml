@@ -24,7 +24,6 @@ classifiers = [
 dependencies = [
     "yt-dlp>=2024.0.0",
     "youtube-transcript-api>=0.6.0",
-    "ffmpeg-python>=0.2.0",
     "click>=8.0.0",
     "python-dateutil>=2.8.0",
     "pyyaml>=6.0.0",
@@ -46,9 +45,9 @@ dev = [
 ytcapture = "ytcapture.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/ytcapture"
-Repository = "https://github.com/yourusername/ytcapture"
-Issues = "https://github.com/yourusername/ytcapture/issues"
+Homepage = "https://github.com/jdmonaco/ytcapture"
+Repository = "https://github.com/jdmonaco/ytcapture"
+Issues = "https://github.com/jdmonaco/ytcapture/issues"
 
 [build-system]
 requires = ["hatchling"]
