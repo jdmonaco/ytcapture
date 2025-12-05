@@ -106,8 +106,8 @@ def get_stream_url(url: str) -> str:
     Raises:
         VideoError: If stream URL cannot be obtained.
     """
-    # Format spec targeting 720p resolution for balance of quality and speed
-    format_spec = 'bestvideo[height=720][ext=mp4]/bestvideo[height=720]/22/18/best'
+    # Format spec targeting 360p-480p for fast processing
+    format_spec = 'bestvideo[height<=480][ext=mp4]/bestvideo[height<=480]/18/best'
 
     cmd = [
         'yt-dlp',
