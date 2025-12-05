@@ -101,13 +101,11 @@ def generate_frontmatter(
 
 def generate_markdown_body(
     grouped_data: list[tuple[FrameInfo, list[TranscriptSegment]]],
-    images_dir: str,
 ) -> str:
     """Generate markdown body with embedded frames and transcript.
 
     Args:
         grouped_data: List of (frame, segments) tuples from align_transcript_to_frames.
-        images_dir: Name of the images subdirectory for embed paths.
 
     Returns:
         Markdown body string.
@@ -120,7 +118,7 @@ def generate_markdown_body(
         section = f'\n## {timestamp_str}\n\n'
 
         # Frame embed (Obsidian syntax)
-        relative_path = f'{images_dir}/{frame.path.name}'
+        relative_path = f'images/{frame.path.name}'
         section += f'![[{relative_path}]]\n\n'
 
         # Transcript text for this frame's time window
@@ -135,13 +133,11 @@ def generate_markdown_body(
 
 def generate_frames_only(
     frames: list[FrameInfo],
-    images_dir: str,
 ) -> str:
     """Generate markdown body with frames only (no transcript).
 
     Args:
         frames: List of frame info objects.
-        images_dir: Name of the images subdirectory for embed paths.
 
     Returns:
         Markdown body string.
@@ -150,7 +146,7 @@ def generate_frames_only(
 
     for frame in frames:
         timestamp_str = format_timestamp(frame.timestamp)
-        relative_path = f'{images_dir}/{frame.path.name}'
+        relative_path = f'images/{frame.path.name}'
 
         section = f'\n## {timestamp_str}\n\n![[{relative_path}]]\n'
         sections.append(section)
@@ -164,7 +160,6 @@ def generate_markdown_file(
     transcript: list[TranscriptSegment] | None,
     frames: list[FrameInfo],
     output_dir: Path,
-    images_dir: str,
 ) -> Path:
     """Generate complete markdown file.
 
@@ -174,7 +169,6 @@ def generate_markdown_file(
         transcript: List of transcript segments, or None.
         frames: List of frame info objects.
         output_dir: Directory to save the markdown file.
-        images_dir: Name of the images subdirectory.
 
     Returns:
         Path to the generated markdown file.
@@ -185,16 +179,25 @@ def generate_markdown_file(
     # Generate body
     if transcript and frames:
         grouped = align_transcript_to_frames(transcript, frames)
-        body = generate_markdown_body(grouped, images_dir)
+        body = generate_markdown_body(grouped)
     elif frames:
-        body = generate_frames_only(frames, images_dir)
+        body = generate_frames_only(frames)
     else:
         # No frames or transcript
         body = '\n*No frames or transcript available.*\n'
 
-    # Combine: frontmatter + H1 title + body
+    # Generate description blockquote (first paragraph only)
+    description_section = ''
+    if metadata.description:
+        first_para = metadata.description.strip().split('\n\n')[0]
+        desc_lines = first_para.strip().split('\n')
+        desc_blockquote = '\n'.join(f'> {line}' for line in desc_lines if line.strip())
+        if desc_blockquote:
+            description_section = f'\n{desc_blockquote}\n'
+
+    # Combine: frontmatter + H1 title + description + body
     title_heading = f'\n# {metadata.title}\n'
-    content = frontmatter + title_heading + body
+    content = frontmatter + title_heading + description_section + body
 
     # Generate filename
     sanitized_title = sanitize_title(metadata.title)

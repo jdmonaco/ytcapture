@@ -1,6 +1,6 @@
 [project]
 name = "ytcapture"
-version = "0.1.0"
+version = "0.1.1"
 description = "Extract video frames and transcripts from YouTube videos into Obsidian-compatible markdown"
 authors = [
     { name = "Joe Monaco", email = "joe@selfmotion.net" }
@@ -30,6 +30,7 @@ dependencies = [
     "pyyaml>=6.0.0",
     "imagehash>=4.3.0",
     "Pillow>=10.0.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]

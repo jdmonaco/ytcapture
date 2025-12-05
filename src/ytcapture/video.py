@@ -1,8 +1,9 @@
-"""Video metadata extraction using yt-dlp."""
+"""Video metadata extraction and download using yt-dlp."""
 
 import json
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 from ytcapture.utils import extract_video_id
 
@@ -141,3 +142,80 @@ def get_stream_url(url: str) -> str:
         raise VideoError("yt-dlp not found. Please install yt-dlp.")
     except Exception as e:
         raise VideoError(f"Unexpected error getting stream URL: {e}") from e
+
+
+def download_video(url: str, output_dir: Path) -> Path:
+    """Download video to local file.
+
+    Targets 720p/1080p, falls back to 480p/360p. Excludes 4K.
+
+    Args:
+        url: YouTube video URL.
+        output_dir: Directory to save the video file.
+
+    Returns:
+        Path to the downloaded video file.
+
+    Raises:
+        VideoError: If download fails.
+    """
+    # Format spec: prefer 720p-1080p video+audio, fallback to 480p, then 360p
+    format_spec = (
+        'bestvideo[height<=1080][height>=720][ext=mp4]+bestaudio[ext=m4a]/'
+        'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/'
+        '18/best'
+    )
+    output_template = str(output_dir / '%(id)s.%(ext)s')
+
+    cmd = [
+        'yt-dlp',
+        '--format', format_spec,
+        '--output', output_template,
+        '--no-warnings',
+        '--remote-components', 'ejs:github',
+        '--merge-output-format', 'mp4',
+        url,
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minute timeout for downloads
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr
+            if 'Private video' in error_msg:
+                raise VideoError(f"Video is private: {url}")
+            if 'Video unavailable' in error_msg:
+                raise VideoError(f"Video is unavailable: {url}")
+            if 'Sign in' in error_msg:
+                raise VideoError(f"Video requires authentication: {url}")
+            raise VideoError(f"Failed to download video: {error_msg}")
+
+        # Find the downloaded file
+        video_files = list(output_dir.glob('*.mp4'))
+        if not video_files:
+            video_files = list(output_dir.glob('*.webm'))
+        if not video_files:
+            video_files = list(output_dir.glob('*.mkv'))
+
+        if not video_files:
+            raise VideoError("Download completed but no video file found")
+
+        return video_files[0]
+
+    except subprocess.TimeoutExpired:
+        raise VideoError("Video download timed out (10 minute limit)")
+    except FileNotFoundError:
+        raise VideoError(
+            "yt-dlp not found. Please install yt-dlp:\n"
+            "  pip install yt-dlp\n"
+            "  or: brew install yt-dlp"
+        )
+    except VideoError:
+        raise
+    except Exception as e:
+        raise VideoError(f"Unexpected error downloading video: {e}") from e
