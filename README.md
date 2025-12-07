@@ -31,8 +31,8 @@ brew install ffmpeg yt-dlp
 git clone https://github.com/jdmonaco/ytcapture.git
 cd ytcapture
 
-# Install with uv (recommended)
-uv sync
+# Install as a CLI tool with uv (recommended)
+uv tool install -e .
 
 # Or install with pip
 pip install -e .
@@ -44,8 +44,11 @@ pip install -e .
 # Basic usage - creates a folder with the video title
 ytcapture "https://www.youtube.com/watch?v=VIDEO_ID"
 
+# On macOS, just copy a YouTube URL and run without arguments
+ytcapture
+
 # Specify output directory
-ytcapture "https://www.youtube.com/watch?v=VIDEO_ID" -o my-notes/
+ytcapture URL -o my-notes/
 
 # Adjust frame interval (default: 15 seconds)
 ytcapture URL --interval 30
@@ -79,6 +82,7 @@ author:
   - Deep Learning Channel
 created: '2024-12-15'
 published: '2024-11-20'
+description: An introduction to neural networks and deep learning fundamentals...
 tags:
   - youtube
 ---
@@ -113,6 +117,8 @@ Let's start by understanding what a neuron is and how it processes information.
 | `--no-dedup` | - | Disable frame deduplication |
 | `--prefer-manual` | - | Only use manual transcripts |
 | `--keep-video` | - | Keep downloaded video file after frame extraction |
+| `-v, --verbose` | - | Verbose output |
+| `-h, --help` | - | Show help message |
 
 ## Tips
 
