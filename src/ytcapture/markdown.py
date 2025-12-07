@@ -7,7 +7,7 @@ import yaml
 
 from ytcapture.frames import FrameInfo
 from ytcapture.transcript import TranscriptSegment
-from ytcapture.utils import format_date, format_timestamp, sanitize_title
+from ytcapture.utils import format_date, format_timestamp, sanitize_title, truncate_title_words
 from ytcapture.video import VideoMetadata
 
 
@@ -101,11 +101,13 @@ def generate_frontmatter(
 
 def generate_markdown_body(
     grouped_data: list[tuple[FrameInfo, list[TranscriptSegment]]],
+    video_id: str,
 ) -> str:
     """Generate markdown body with embedded frames and transcript.
 
     Args:
         grouped_data: List of (frame, segments) tuples from align_transcript_to_frames.
+        video_id: YouTube video ID for constructing embed paths.
 
     Returns:
         Markdown body string.
@@ -118,7 +120,7 @@ def generate_markdown_body(
         section = f'\n## {timestamp_str}\n\n'
 
         # Frame embed (Obsidian syntax)
-        relative_path = f'images/{frame.path.name}'
+        relative_path = f'images/{video_id}/{frame.path.name}'
         section += f'![[{relative_path}]]\n\n'
 
         # Transcript text for this frame's time window
@@ -133,11 +135,13 @@ def generate_markdown_body(
 
 def generate_frames_only(
     frames: list[FrameInfo],
+    video_id: str,
 ) -> str:
     """Generate markdown body with frames only (no transcript).
 
     Args:
         frames: List of frame info objects.
+        video_id: YouTube video ID for constructing embed paths.
 
     Returns:
         Markdown body string.
@@ -146,12 +150,27 @@ def generate_frames_only(
 
     for frame in frames:
         timestamp_str = format_timestamp(frame.timestamp)
-        relative_path = f'images/{frame.path.name}'
+        relative_path = f'images/{video_id}/{frame.path.name}'
 
         section = f'\n## {timestamp_str}\n\n![[{relative_path}]]\n'
         sections.append(section)
 
     return ''.join(sections)
+
+
+def generate_markdown_filename(metadata: VideoMetadata) -> str:
+    """Generate the markdown filename from video metadata.
+
+    Args:
+        metadata: Video metadata object.
+
+    Returns:
+        Filename string (without directory path).
+    """
+    short_title = sanitize_title(truncate_title_words(metadata.title, 6))
+    channel = sanitize_title(metadata.channel)
+    date_str = metadata.upload_date  # Already YYYYMMDD from yt-dlp
+    return f'{short_title} ({channel}) {date_str}.md'
 
 
 def generate_markdown_file(
@@ -160,6 +179,7 @@ def generate_markdown_file(
     transcript: list[TranscriptSegment] | None,
     frames: list[FrameInfo],
     output_dir: Path,
+    video_path: Path | None = None,
 ) -> Path:
     """Generate complete markdown file.
 
@@ -169,22 +189,32 @@ def generate_markdown_file(
         transcript: List of transcript segments, or None.
         frames: List of frame info objects.
         output_dir: Directory to save the markdown file.
+        video_path: Path to saved video file (if --keep-video was used).
 
     Returns:
         Path to the generated markdown file.
     """
+    video_id = metadata.video_id
+
     # Generate frontmatter
     frontmatter = generate_frontmatter(metadata, url)
 
     # Generate body
     if transcript and frames:
         grouped = align_transcript_to_frames(transcript, frames)
-        body = generate_markdown_body(grouped)
+        body = generate_markdown_body(grouped, video_id)
     elif frames:
-        body = generate_frames_only(frames)
+        body = generate_frames_only(frames, video_id)
     else:
         # No frames or transcript
         body = '\n*No frames or transcript available.*\n'
+
+    # Generate video embed (if video was saved)
+    video_embed = ''
+    if video_path and video_path.exists():
+        # Use relative path from output_dir (where markdown will be)
+        relative_video_path = f'videos/{video_path.name}'
+        video_embed = f'\n<video src="{relative_video_path}" controls width="100%"></video>\n'
 
     # Generate description blockquote (first paragraph only)
     description_section = ''
@@ -195,14 +225,12 @@ def generate_markdown_file(
         if desc_blockquote:
             description_section = f'\n{desc_blockquote}\n'
 
-    # Combine: frontmatter + H1 title + description + body
+    # Combine: frontmatter + H1 title + video embed + description + body
     title_heading = f'\n# {metadata.title}\n'
-    content = frontmatter + title_heading + description_section + body
+    content = frontmatter + title_heading + video_embed + description_section + body
 
     # Generate filename
-    sanitized_title = sanitize_title(metadata.title)
-    date_str = datetime.now().strftime('%Y%m%d')
-    filename = f'{sanitized_title} {date_str}.md'
+    filename = generate_markdown_filename(metadata)
 
     filepath = output_dir / filename
     filepath.write_text(content, encoding='utf-8')

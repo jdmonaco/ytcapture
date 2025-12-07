@@ -10,10 +10,16 @@ from rich.console import Console
 
 from ytcapture import __version__
 from ytcapture.frames import FrameExtractionError, extract_frames_from_file
-from ytcapture.markdown import generate_markdown_file
+from ytcapture.markdown import generate_markdown_file, generate_markdown_filename
 from ytcapture.transcript import TranscriptSegment, get_transcript, save_transcript_json
-from ytcapture.utils import extract_video_id, sanitize_title
-from ytcapture.video import VideoError, VideoMetadata, download_video, get_video_metadata
+from ytcapture.utils import is_playlist_url, is_video_url
+from ytcapture.video import (
+    VideoError,
+    VideoMetadata,
+    download_video,
+    expand_playlist,
+    get_video_metadata,
+)
 
 console = Console()
 
@@ -21,8 +27,7 @@ console = Console()
 def get_clipboard_url() -> str | None:
     """Check clipboard for a YouTube URL (macOS only).
 
-    Returns:
-        YouTube URL from clipboard, or None if not found/available.
+    Returns video or playlist URL from clipboard, or None if not found/available.
     """
     if platform.system() != 'Darwin':
         return None
@@ -39,8 +44,8 @@ def get_clipboard_url() -> str | None:
         )
         clipboard = result.stdout.strip()
 
-        # Check if it looks like a YouTube URL
-        if clipboard and extract_video_id(clipboard):
+        # Check if it looks like a YouTube video or playlist URL
+        if clipboard and (is_video_url(clipboard) or is_playlist_url(clipboard)):
             return clipboard
 
     except Exception:
@@ -82,12 +87,140 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024 / 1024:.1f} MB"
 
 
+def process_video(
+    url: str,
+    output_dir: Path,
+    interval: int,
+    max_frames: int | None,
+    frame_format: str,
+    language: str,
+    prefer_manual: bool,
+    dedup_threshold: float,
+    no_dedup: bool,
+    keep_video: bool,
+) -> Path:
+    """Process a single video URL.
+
+    Args:
+        url: YouTube video URL.
+        output_dir: Output directory.
+        interval: Frame extraction interval in seconds.
+        max_frames: Maximum number of frames to extract.
+        frame_format: Frame image format (jpg or png).
+        language: Transcript language code.
+        prefer_manual: Only use manual transcripts.
+        dedup_threshold: Similarity threshold for frame deduplication.
+        no_dedup: Disable frame deduplication.
+        keep_video: Keep downloaded video file.
+
+    Returns:
+        Path to the generated markdown file.
+
+    Raises:
+        VideoError: If video processing fails.
+        FrameExtractionError: If frame extraction fails.
+    """
+    # 1. Get video metadata
+    with console.status("[bold blue]Fetching video metadata...", spinner="dots"):
+        metadata: VideoMetadata = get_video_metadata(url)
+
+    console.print("[green]✓[/] Fetched video metadata")
+    console.print(f"  [dim]Title:[/] {metadata.title}")
+    console.print(f"  [dim]Channel:[/] {metadata.channel}")
+
+    # 2. Create directory structure
+    output_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir = output_dir / 'images' / metadata.video_id
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    transcripts_dir = output_dir / 'transcripts'
+    transcripts_dir.mkdir(exist_ok=True)
+    videos_dir = output_dir / 'videos'
+    videos_dir.mkdir(exist_ok=True)
+
+    # 3. Get transcript
+    with console.status("[bold blue]Fetching transcript...", spinner="dots"):
+        transcript: list[TranscriptSegment] | None = get_transcript(
+            metadata.video_id,
+            language=language,
+            prefer_manual=prefer_manual,
+        )
+
+    if transcript:
+        console.print(f"[green]✓[/] Found {len(transcript)} transcript segments")
+        save_transcript_json(
+            transcript,
+            transcripts_dir / f'raw-transcript-{metadata.video_id}.json',
+        )
+    else:
+        console.print("[yellow]⚠[/] No transcript available, proceeding with frames only")
+
+    # 4. Download video
+    with console.status("[bold blue]Downloading video...", spinner="dots"):
+        video_path = download_video(url, videos_dir)
+
+    video_size = format_size(video_path.stat().st_size)
+    console.print(f"[green]✓[/] Downloaded video ({video_size})")
+
+    # 5. Extract frames (with integrated dedup)
+    with console.status("[bold blue]Extracting frames...", spinner="dots"):
+        frames = extract_frames_from_file(
+            video_path,
+            frames_dir,
+            interval=interval,
+            max_frames=max_frames,
+            frame_format=frame_format,
+            dedup_threshold=None if no_dedup else dedup_threshold,
+        )
+
+    dedup_msg = "" if no_dedup else " (deduplicated)"
+    console.print(f"[green]✓[/] Extracted {len(frames)} frames{dedup_msg}")
+
+    # 6. Handle video file (keep or delete)
+    final_video_path: Path | None = None
+    if keep_video:
+        # Rename video to match markdown filename (for readability)
+        md_filename = generate_markdown_filename(metadata)
+        md_basename = md_filename.rsplit('.', 1)[0]  # Remove .md extension
+        video_ext = video_path.suffix  # .mp4, .webm, etc.
+        final_video_path = videos_dir / f'{md_basename}{video_ext}'
+
+        if video_path != final_video_path:
+            video_path.rename(final_video_path)
+
+        console.print(f"  [dim]Video saved:[/] {final_video_path}")
+    else:
+        try:
+            video_path.unlink()
+            videos_dir.rmdir()
+        except Exception:
+            pass  # Ignore cleanup errors
+
+    # 7. Generate markdown
+    with console.status("[bold blue]Generating markdown...", spinner="dots"):
+        md_file = generate_markdown_file(
+            metadata,
+            url,
+            transcript,
+            frames,
+            output_dir,
+            video_path=final_video_path,
+        )
+
+    console.print("[green]✓[/] Generated markdown")
+
+    # 8. Format markdown (if mdformat available)
+    if format_markdown(md_file):
+        console.print("  [dim]Formatted with mdformat[/]")
+
+    return md_file
+
+
 @click.command(context_settings={'help_option_names': ['-h', '--help']})
-@click.argument('url', required=False, default=None)
+@click.argument('urls', nargs=-1)
 @click.option(
     '-o', '--output',
     type=click.Path(),
-    help='Output directory (default: sanitized video title)',
+    help='Output directory (default: current directory)',
 )
 @click.option(
     '--interval',
@@ -133,13 +266,18 @@ def format_size(size_bytes: int) -> str:
     help='Keep downloaded video file after frame extraction',
 )
 @click.option(
+    '-y', '--yes',
+    is_flag=True,
+    help='Skip confirmation prompt for large batches (>10 videos)',
+)
+@click.option(
     '-v', '--verbose',
     is_flag=True,
     help='Verbose output',
 )
 @click.version_option(version=__version__)
 def main(
-    url: str | None,
+    urls: tuple[str, ...],
     output: str | None,
     interval: int,
     max_frames: int | None,
@@ -149,129 +287,114 @@ def main(
     dedup_threshold: float,
     no_dedup: bool,
     keep_video: bool,
+    yes: bool,
     verbose: bool,
 ) -> None:
-    """Extract frames and transcript from a YouTube video.
+    """Extract frames and transcript from YouTube videos.
 
-    Creates an Obsidian-compatible markdown file with embedded frames
+    Creates Obsidian-compatible markdown files with embedded frames
     and timestamped transcript segments.
 
-    URL should be a valid YouTube video URL. If not provided, checks the
-    clipboard for a YouTube URL (macOS only).
+    URLS can be video URLs or playlist URLs. Playlists are automatically
+    expanded. If no URLs provided, checks clipboard (macOS only).
 
-    Example:
+    Examples:
 
-        ytcapture "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    \b
+        ytcapture "https://www.youtube.com/watch?v=VIDEO_ID"
+        ytcapture URL1 URL2 URL3
+        ytcapture "https://www.youtube.com/playlist?list=PLAYLIST_ID"
     """
-    # Check clipboard if no URL provided
-    if url is None:
-        url = get_clipboard_url()
-        if url:
-            console.print(f"[dim]Using URL from clipboard:[/] {url}")
+    # 1. Collect URLs from arguments and/or clipboard
+    url_list = list(urls)
+    if not url_list:
+        clipboard_url = get_clipboard_url()
+        if clipboard_url:
+            console.print(f"[dim]Using URL from clipboard:[/] {clipboard_url}")
+            url_list = [clipboard_url]
         else:
             raise click.ClickException(
-                "No URL provided. Pass a YouTube URL as an argument or copy one to the clipboard."
+                "No URLs provided. Pass YouTube URLs as arguments or copy one to clipboard."
             )
-
-    # 1. Get video metadata
-    with console.status("[bold blue]Fetching video metadata...", spinner="dots"):
-        try:
-            metadata: VideoMetadata = get_video_metadata(url)
-        except VideoError as e:
-            console.print(f"[red]✗[/] {e}")
-            raise click.ClickException(str(e))
-
-    console.print("[green]✓[/] Fetched video metadata")
-    console.print(f"  [dim]Title:[/] {metadata.title}")
-    console.print(f"  [dim]Channel:[/] {metadata.channel}")
 
     # 2. Determine output directory
     if output:
         output_dir = Path(output)
     else:
-        output_dir = Path(sanitize_title(metadata.title))
+        output_dir = Path('.')
 
-    console.print(f"  [dim]Output:[/] {output_dir}/")
+    console.print(f"[dim]Output directory:[/] {output_dir.resolve()}/")
 
-    # 3. Create directory structure
-    output_dir.mkdir(parents=True, exist_ok=True)
-    frames_dir = output_dir / 'images'
-    frames_dir.mkdir(exist_ok=True)
-    transcript_dir = output_dir / 'transcript'
-    transcript_dir.mkdir(exist_ok=True)
-    video_dir = output_dir / 'video'
-    video_dir.mkdir(exist_ok=True)
+    # 3. Classify and expand URLs
+    video_urls: list[str] = []
+    for url in url_list:
+        if is_playlist_url(url):
+            console.print(f"\n[dim]Expanding playlist:[/] {url}")
+            with console.status("[bold blue]Fetching playlist...", spinner="dots"):
+                try:
+                    playlist_videos = expand_playlist(url)
+                except VideoError as e:
+                    console.print(f"[red]✗[/] Failed to expand playlist: {e}")
+                    continue
+            console.print(f"[green]✓[/] Found {len(playlist_videos)} videos in playlist")
+            video_urls.extend(playlist_videos)
+        elif is_video_url(url):
+            video_urls.append(url)
+        else:
+            console.print(f"[yellow]⚠[/] Skipping invalid URL: {url}")
 
-    # 4. Get transcript
-    with console.status("[bold blue]Fetching transcript...", spinner="dots"):
-        transcript: list[TranscriptSegment] | None = get_transcript(
-            metadata.video_id,
-            language=language,
-            prefer_manual=prefer_manual,
-        )
+    if not video_urls:
+        raise click.ClickException("No valid video URLs found.")
 
-    if transcript:
-        console.print(f"[green]✓[/] Found {len(transcript)} transcript segments")
-        save_transcript_json(transcript, transcript_dir / 'raw-transcript.json')
-    else:
-        console.print("[yellow]⚠[/] No transcript available, proceeding with frames only")
+    # 4. Deduplicate video URLs
+    seen: set[str] = set()
+    unique_urls: list[str] = []
+    for url in video_urls:
+        if url not in seen:
+            seen.add(url)
+            unique_urls.append(url)
+    video_urls = unique_urls
 
-    # 5. Download video
-    with console.status("[bold blue]Downloading video...", spinner="dots"):
+    # 5. Confirm if >10 videos (unless -y/--yes)
+    if len(video_urls) > 10 and not yes:
+        console.print(f"\n[bold]Found {len(video_urls)} videos to process.[/]")
+        if not click.confirm("Continue?", default=True):
+            raise click.ClickException("Cancelled by user.")
+
+    # 6. Process each video
+    console.print(f"\n[bold]Processing {len(video_urls)} video(s)...[/]\n")
+
+    success_count = 0
+    error_count = 0
+
+    for i, video_url in enumerate(video_urls, 1):
+        console.print(f"[bold blue][{i}/{len(video_urls)}][/] {video_url}")
         try:
-            video_path = download_video(url, video_dir)
-        except VideoError as e:
-            console.print(f"[red]✗[/] Download failed: {e}")
-            raise click.ClickException(str(e))
-
-    video_size = format_size(video_path.stat().st_size)
-    console.print(f"[green]✓[/] Downloaded video ({video_size})")
-
-    # 6. Extract frames (with integrated dedup)
-    with console.status("[bold blue]Extracting frames...", spinner="dots"):
-        try:
-            frames = extract_frames_from_file(
-                video_path,
-                frames_dir,
-                interval=interval,
-                max_frames=max_frames,
-                frame_format=frame_format,
-                dedup_threshold=None if no_dedup else dedup_threshold,
+            md_file = process_video(
+                video_url,
+                output_dir,
+                interval,
+                max_frames,
+                frame_format,
+                language,
+                prefer_manual,
+                dedup_threshold,
+                no_dedup,
+                keep_video,
             )
-        except FrameExtractionError as e:
-            console.print(f"[red]✗[/] Frame extraction failed: {e}")
-            raise click.ClickException(str(e))
+            console.print(f"[green]✓[/] {md_file.name}\n")
+            success_count += 1
+        except (VideoError, FrameExtractionError) as e:
+            console.print(f"[red]✗[/] Failed: {e}\n")
+            error_count += 1
 
-    dedup_msg = "" if no_dedup else " (deduplicated)"
-    console.print(f"[green]✓[/] Extracted {len(frames)} frames{dedup_msg}")
-
-    # 7. Cleanup video (unless --keep-video)
-    if keep_video:
-        console.print(f"  [dim]Video saved:[/] {video_path}")
-    else:
-        try:
-            video_path.unlink()
-            video_dir.rmdir()
-        except Exception:
-            pass  # Ignore cleanup errors
-
-    # 8. Generate markdown
-    with console.status("[bold blue]Generating markdown...", spinner="dots"):
-        md_file = generate_markdown_file(
-            metadata,
-            url,
-            transcript,
-            frames,
-            output_dir,
+    # 7. Summary
+    if error_count > 0:
+        console.print(
+            f"\n[bold yellow]Complete![/] {success_count} succeeded, {error_count} failed"
         )
-
-    console.print("[green]✓[/] Generated markdown")
-
-    # 9. Format markdown (if mdformat available)
-    if format_markdown(md_file):
-        console.print("  [dim]Formatted with mdformat[/]")
-
-    console.print(f"\n[bold green]Complete![/] Output: {md_file}")
+    else:
+        console.print(f"\n[bold green]Complete![/] {success_count} video(s) processed")
 
 
 if __name__ == '__main__':

@@ -41,11 +41,20 @@ pip install -e .
 ## Usage
 
 ```bash
-# Basic usage - creates a folder with the video title
+# Basic usage - outputs to current directory
 ytcapture "https://www.youtube.com/watch?v=VIDEO_ID"
 
-# On macOS, just copy a YouTube URL and run without arguments
+# Multiple videos at once
+ytcapture URL1 URL2 URL3
+
+# Process an entire playlist (auto-expands)
+ytcapture "https://www.youtube.com/playlist?list=PLAYLIST_ID"
+
+# On macOS, just copy a YouTube URL (or playlist) and run without arguments
 ytcapture
+
+# Skip confirmation for large playlists (>10 videos)
+ytcapture "https://www.youtube.com/playlist?list=PLAYLIST_ID" -y
 
 # Specify output directory
 ytcapture URL -o my-notes/
@@ -60,15 +69,18 @@ ytcapture URL --interval 5 --dedup-threshold 0.80
 ## Output Structure
 
 ```
-Video Title/
+./
 ├── images/
-│   ├── frame-0000.jpg
-│   ├── frame-0001.jpg
-│   └── ...
-├── transcript/
-│   └── raw-transcript.json
-└── Video Title 20241215.md
+│   └── VIDEO_ID/
+│       ├── frame-0000.jpg
+│       ├── frame-0001.jpg
+│       └── ...
+├── transcripts/
+│   └── raw-transcript-VIDEO_ID.json
+└── Video Title (Channel Name) 20241120.md
 ```
+
+Assets are organized by video ID to support multiple video captures in the same directory.
 
 ## Example Output
 
@@ -93,13 +105,13 @@ tags:
 
 ## 00:00:00
 
-![[images/frame-0000.jpg]]
+![[images/abc123/frame-0000.jpg]]
 
 Welcome to this tutorial on neural networks. Today we'll cover the basics.
 
 ## 00:00:15
 
-![[images/frame-0001.jpg]]
+![[images/abc123/frame-0001.jpg]]
 
 Let's start by understanding what a neuron is and how it processes information.
 ```
@@ -108,7 +120,7 @@ Let's start by understanding what a neuron is and how it processes information.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-o, --output` | Video title | Output directory |
+| `-o, --output` | `.` | Output directory |
 | `--interval` | 15 | Frame extraction interval in seconds |
 | `--max-frames` | None | Maximum number of frames to extract |
 | `--frame-format` | jpg | Frame format: `jpg` or `png` |
@@ -117,6 +129,7 @@ Let's start by understanding what a neuron is and how it processes information.
 | `--no-dedup` | - | Disable frame deduplication |
 | `--prefer-manual` | - | Only use manual transcripts |
 | `--keep-video` | - | Keep downloaded video file after frame extraction |
+| `-y, --yes` | - | Skip confirmation prompt for large batches (>10 videos) |
 | `-v, --verbose` | - | Verbose output |
 | `-h, --help` | - | Show help message |
 

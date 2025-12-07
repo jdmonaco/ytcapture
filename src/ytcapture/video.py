@@ -219,3 +219,72 @@ def download_video(url: str, output_dir: Path) -> Path:
         raise
     except Exception as e:
         raise VideoError(f"Unexpected error downloading video: {e}") from e
+
+
+def expand_playlist(url: str) -> list[str]:
+    """Expand a YouTube playlist URL to a list of video URLs.
+
+    Uses yt-dlp with --flat-playlist to get video entries without downloading.
+
+    Args:
+        url: A YouTube playlist URL.
+
+    Returns:
+        List of video URLs from the playlist.
+
+    Raises:
+        VideoError: If playlist extraction fails.
+    """
+    cmd = [
+        'yt-dlp',
+        '--dump-json',
+        '--flat-playlist',
+        '--skip-download',
+        '--no-warnings',
+        url,
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,  # 2 minute timeout for playlist metadata
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr
+            if 'Private' in error_msg:
+                raise VideoError(f"Playlist is private: {url}")
+            if 'not exist' in error_msg or 'unavailable' in error_msg.lower():
+                raise VideoError(f"Playlist not found: {url}")
+            raise VideoError(f"Failed to expand playlist: {error_msg}")
+
+        # --flat-playlist outputs one JSON object per line (NDJSON)
+        video_urls: list[str] = []
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                # Each entry has 'id' and optionally 'url'
+                video_id = entry.get('id')
+                if video_id:
+                    video_urls.append(f"https://www.youtube.com/watch?v={video_id}")
+            except json.JSONDecodeError:
+                continue  # Skip malformed entries
+
+        return video_urls
+
+    except subprocess.TimeoutExpired:
+        raise VideoError("Playlist expansion timed out")
+    except FileNotFoundError:
+        raise VideoError(
+            "yt-dlp not found. Please install yt-dlp:\n"
+            "  pip install yt-dlp\n"
+            "  or: brew install yt-dlp"
+        )
+    except VideoError:
+        raise
+    except Exception as e:
+        raise VideoError(f"Unexpected error expanding playlist: {e}") from e
