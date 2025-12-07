@@ -1,5 +1,6 @@
 """CLI interface for ytcapture."""
 
+import platform
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,10 +12,41 @@ from ytcapture import __version__
 from ytcapture.frames import FrameExtractionError, extract_frames_from_file
 from ytcapture.markdown import generate_markdown_file
 from ytcapture.transcript import TranscriptSegment, get_transcript, save_transcript_json
-from ytcapture.utils import sanitize_title
+from ytcapture.utils import extract_video_id, sanitize_title
 from ytcapture.video import VideoError, VideoMetadata, download_video, get_video_metadata
 
 console = Console()
+
+
+def get_clipboard_url() -> str | None:
+    """Check clipboard for a YouTube URL (macOS only).
+
+    Returns:
+        YouTube URL from clipboard, or None if not found/available.
+    """
+    if platform.system() != 'Darwin':
+        return None
+
+    if shutil.which('pbpaste') is None:
+        return None
+
+    try:
+        result = subprocess.run(
+            ['pbpaste'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        clipboard = result.stdout.strip()
+
+        # Check if it looks like a YouTube URL
+        if clipboard and extract_video_id(clipboard):
+            return clipboard
+
+    except Exception:
+        pass
+
+    return None
 
 
 def format_markdown(filepath: Path) -> bool:
@@ -50,8 +82,8 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024 / 1024:.1f} MB"
 
 
-@click.command()
-@click.argument('url')
+@click.command(context_settings={'help_option_names': ['-h', '--help']})
+@click.argument('url', required=False, default=None)
 @click.option(
     '-o', '--output',
     type=click.Path(),
@@ -107,7 +139,7 @@ def format_size(size_bytes: int) -> str:
 )
 @click.version_option(version=__version__)
 def main(
-    url: str,
+    url: str | None,
     output: str | None,
     interval: int,
     max_frames: int | None,
@@ -124,12 +156,23 @@ def main(
     Creates an Obsidian-compatible markdown file with embedded frames
     and timestamped transcript segments.
 
-    URL should be a valid YouTube video URL.
+    URL should be a valid YouTube video URL. If not provided, checks the
+    clipboard for a YouTube URL (macOS only).
 
     Example:
 
         ytcapture "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     """
+    # Check clipboard if no URL provided
+    if url is None:
+        url = get_clipboard_url()
+        if url:
+            console.print(f"[dim]Using URL from clipboard:[/] {url}")
+        else:
+            raise click.ClickException(
+                "No URL provided. Pass a YouTube URL as an argument or copy one to the clipboard."
+            )
+
     # 1. Get video metadata
     with console.status("[bold blue]Fetching video metadata...", spinner="dots"):
         try:
