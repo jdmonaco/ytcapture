@@ -1,15 +1,18 @@
-"""CLI interface for ytcapture."""
+"""CLI interface for ytcapture and vidcapture."""
 
+import json
 import platform
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Callable, TypeVar
 
 import click
 from rich.console import Console
 
 from ytcapture import __version__
-from ytcapture.frames import FrameExtractionError, extract_frames_from_file
+from ytcapture.frames import FrameExtractionError, extract_frames_fast, extract_frames_from_file
+from ytcapture.local import LocalVideoError, LocalVideoMetadata, get_local_video_metadata
 from ytcapture.markdown import generate_markdown_file, generate_markdown_filename
 from ytcapture.transcript import TranscriptSegment, get_transcript, save_transcript_json
 from ytcapture.utils import is_playlist_url, is_video_url
@@ -20,6 +23,8 @@ from ytcapture.video import (
     expand_playlist,
     get_video_metadata,
 )
+
+F = TypeVar('F', bound=Callable[..., None])
 
 console = Console()
 
@@ -85,6 +90,49 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024:.1f} KB"
     else:
         return f"{size_bytes / 1024 / 1024:.1f} MB"
+
+
+def common_frame_options(func: F) -> F:
+    """Decorator for frame extraction options shared by ytcapture and vidcapture."""
+    func = click.option(
+        '-o', '--output',
+        type=click.Path(),
+        help='Output directory (default: current directory)',
+    )(func)
+    func = click.option(
+        '--interval',
+        type=int,
+        default=15,
+        help='Frame extraction interval in seconds (default: 15)',
+    )(func)
+    func = click.option(
+        '--max-frames',
+        type=int,
+        help='Maximum number of frames to extract',
+    )(func)
+    func = click.option(
+        '--frame-format',
+        type=click.Choice(['jpg', 'png']),
+        default='jpg',
+        help='Frame image format (default: jpg)',
+    )(func)
+    func = click.option(
+        '--dedup-threshold',
+        type=float,
+        default=0.85,
+        help='Similarity threshold for frame deduplication (0.0-1.0, default: 0.85)',
+    )(func)
+    func = click.option(
+        '--no-dedup',
+        is_flag=True,
+        help='Disable frame deduplication',
+    )(func)
+    func = click.option(
+        '-v', '--verbose',
+        is_flag=True,
+        help='Verbose output',
+    )(func)
+    return func  # type: ignore[return-value]
 
 
 def process_video(
@@ -395,6 +443,237 @@ def main(
         )
     else:
         console.print(f"\n[bold green]Complete![/] {success_count} video(s) processed")
+
+
+def process_local_video(
+    video_path: Path,
+    output_dir: Path,
+    interval: int,
+    max_frames: int | None,
+    frame_format: str,
+    dedup_threshold: float,
+    no_dedup: bool,
+    fast: bool = False,
+    json_output: bool = False,
+) -> dict | Path:
+    """Process a single local video file.
+
+    Args:
+        video_path: Path to the local video file.
+        output_dir: Output directory.
+        interval: Frame extraction interval in seconds.
+        max_frames: Maximum number of frames to extract.
+        frame_format: Frame image format (jpg or png).
+        dedup_threshold: Similarity threshold for frame deduplication.
+        no_dedup: Disable frame deduplication.
+        fast: Use fast keyframe-seeking extraction (less accurate timestamps).
+        json_output: If True, return dict instead of Path and suppress console output.
+
+    Returns:
+        Path to the generated markdown file, or dict with status/metadata if json_output.
+
+    Raises:
+        LocalVideoError: If video processing fails.
+        FrameExtractionError: If frame extraction fails.
+    """
+    # Use quiet console for JSON output
+    out_console = Console(quiet=True) if json_output else console
+
+    # 1. Get video metadata
+    with out_console.status("[bold blue]Extracting video metadata...", spinner="dots"):
+        metadata: LocalVideoMetadata = get_local_video_metadata(video_path)
+
+    out_console.print("[green]✓[/] Extracted video metadata")
+    out_console.print(f"  [dim]Title:[/] {metadata.title}")
+    out_console.print(f"  [dim]Duration:[/] {metadata.duration:.1f}s")
+
+    # 2. Create directory structure (with collision handling)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir = output_dir / 'images' / metadata.identifier
+    if frames_dir.exists():
+        # Find next available suffix
+        suffix = 2
+        while (output_dir / 'images' / f"{metadata.file_path.stem}-{suffix}").exists():
+            suffix += 1
+        metadata._identifier_suffix = suffix
+        frames_dir = output_dir / 'images' / metadata.identifier
+        out_console.print(f"  [dim]Using identifier:[/] {metadata.identifier} (collision avoided)")
+    frames_dir.mkdir(parents=True, exist_ok=True)
+
+    # 3. Extract frames (with integrated dedup)
+    extraction_mode = "fast seek" if fast else "full decode"
+    with out_console.status(f"[bold blue]Extracting frames ({extraction_mode})...", spinner="dots"):
+        if fast:
+            frames = extract_frames_fast(
+                video_path,
+                frames_dir,
+                duration=metadata.duration,
+                interval=interval,
+                max_frames=max_frames,
+                frame_format=frame_format,
+                dedup_threshold=None if no_dedup else dedup_threshold,
+            )
+        else:
+            frames = extract_frames_from_file(
+                video_path,
+                frames_dir,
+                interval=interval,
+                max_frames=max_frames,
+                frame_format=frame_format,
+                dedup_threshold=None if no_dedup else dedup_threshold,
+            )
+
+    dedup_msg = "" if no_dedup else " (deduplicated)"
+    out_console.print(f"[green]✓[/] Extracted {len(frames)} frames{dedup_msg}")
+
+    # 4. Generate markdown (no transcript for local videos)
+    with out_console.status("[bold blue]Generating markdown...", spinner="dots"):
+        md_file = generate_markdown_file(
+            metadata,
+            url=None,  # No source URL for local files
+            transcript=None,  # No transcript support yet
+            frames=frames,
+            output_dir=output_dir,
+            video_path=None,  # Don't embed video
+        )
+
+    out_console.print("[green]✓[/] Generated markdown")
+
+    # 5. Format markdown (if mdformat available)
+    if format_markdown(md_file):
+        out_console.print("  [dim]Formatted with mdformat[/]")
+
+    # Return dict for JSON output, or Path for normal output
+    if json_output:
+        return {
+            "status": "success",
+            "video": str(video_path.resolve()),
+            "frames_dir": str(frames_dir.resolve()),
+            "frame_count": len(frames),
+            "markdown": str(md_file.resolve()),
+        }
+    return md_file
+
+
+@click.command(context_settings={'help_option_names': ['-h', '--help']})
+@click.argument('files', nargs=-1, type=click.Path(exists=True))
+@common_frame_options
+@click.option(
+    '--fast',
+    is_flag=True,
+    help='Fast extraction using keyframe seeking (recommended for long videos)',
+)
+@click.option(
+    '--json',
+    'json_output',
+    is_flag=True,
+    help='Output JSON instead of rich console output (for programmatic use)',
+)
+@click.version_option(version=__version__)
+def vidcapture_main(
+    files: tuple[str, ...],
+    output: str | None,
+    interval: int,
+    max_frames: int | None,
+    frame_format: str,
+    dedup_threshold: float,
+    no_dedup: bool,
+    verbose: bool,
+    fast: bool,
+    json_output: bool,
+) -> None:
+    """Extract frames from local video files.
+
+    Creates Obsidian-compatible markdown files with embedded frames.
+
+    FILES are paths to local video files (mp4, mkv, webm, mov, etc.).
+
+    Examples:
+
+    \b
+        vidcapture meeting.mp4
+        vidcapture video1.mp4 video2.mkv -o notes/
+        vidcapture recording.mov --interval 30 --max-frames 50
+        vidcapture long-workshop.mp4 --fast --interval 60
+    """
+    if not files:
+        if json_output:
+            print(json.dumps({"status": "error", "error": "No video files provided"}))
+            return
+        raise click.ClickException(
+            "No video files provided. Pass paths to video files as arguments."
+        )
+
+    # Determine output directory
+    if output:
+        output_dir = Path(output)
+    else:
+        output_dir = Path('.')
+
+    # Use quiet console for JSON output
+    out_console = Console(quiet=True) if json_output else console
+
+    out_console.print(f"[dim]Output directory:[/] {output_dir.resolve()}/")
+
+    # Process each video file
+    out_console.print(f"\n[bold]Processing {len(files)} video file(s)...[/]\n")
+
+    success_count = 0
+    error_count = 0
+    results: list[dict] = []
+
+    for i, file_path in enumerate(files, 1):
+        video_path = Path(file_path)
+        out_console.print(f"[bold blue][{i}/{len(files)}][/] {video_path.name}")
+        try:
+            result = process_local_video(
+                video_path,
+                output_dir,
+                interval,
+                max_frames,
+                frame_format,
+                dedup_threshold,
+                no_dedup,
+                fast,
+                json_output,
+            )
+            if json_output:
+                results.append(result)  # type: ignore[arg-type]
+            else:
+                out_console.print(f"[green]✓[/] {result.name}\n")  # type: ignore[union-attr]
+            success_count += 1
+        except (LocalVideoError, FrameExtractionError) as e:
+            if json_output:
+                results.append({
+                    "status": "error",
+                    "video": str(video_path.resolve()),
+                    "error": str(e),
+                })
+            else:
+                out_console.print(f"[red]✗[/] Failed: {e}\n")
+            error_count += 1
+
+    # JSON output
+    if json_output:
+        # Single file: return single result; multiple files: return array
+        if len(files) == 1:
+            print(json.dumps(results[0], indent=2))
+        else:
+            print(json.dumps({
+                "status": "success" if error_count == 0 else "partial",
+                "succeeded": success_count,
+                "failed": error_count,
+                "results": results,
+            }, indent=2))
+        return
+
+    # Summary
+    if error_count > 0:
+        out_console.print(
+            f"\n[bold yellow]Complete![/] {success_count} succeeded, {error_count} failed"
+        )
+    else:
+        out_console.print(f"\n[bold green]Complete![/] {success_count} video(s) processed")
 
 
 if __name__ == '__main__':
