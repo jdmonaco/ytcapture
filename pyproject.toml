@@ -42,8 +42,8 @@ dev = [
 ]
 
 [project.scripts]
-ytcapture = "ytcapture.cli:main"
-vidcapture = "ytcapture.cli:vidcapture_main"
+ytcapture = "ytcapture.cli:ytcapture_entry"
+vidcapture = "ytcapture.cli:vidcapture_entry"
 
 [project.urls]
 Homepage = "https://github.com/jdmonaco/ytcapture"

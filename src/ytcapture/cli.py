@@ -676,5 +676,41 @@ def vidcapture_main(
         out_console.print(f"\n[bold green]Complete![/] {success_count} video(s) processed")
 
 
+def ytcapture_entry() -> None:
+    """Entry point for ytcapture command.
+
+    Handles completion subcommand before Click processing.
+
+    Shell completion:
+        ytcapture completion bash            Output completion script
+        ytcapture completion bash --install  Install to user completions directory
+    """
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "completion":
+        from ytcapture.completion import completion_command
+
+        sys.exit(completion_command("ytcapture", sys.argv[2:]))
+    main()
+
+
+def vidcapture_entry() -> None:
+    """Entry point for vidcapture command.
+
+    Handles completion subcommand before Click processing.
+
+    Shell completion:
+        vidcapture completion bash            Output completion script
+        vidcapture completion bash --install  Install to user completions directory
+    """
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "completion":
+        from ytcapture.completion import completion_command
+
+        sys.exit(completion_command("vidcapture", sys.argv[2:]))
+    vidcapture_main()
+
+
 if __name__ == '__main__':
     main()
