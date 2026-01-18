@@ -60,6 +60,121 @@ def hash_similarity(hash1: imagehash.ImageHash, hash2: imagehash.ImageHash) -> f
     return 1.0 - (distance / 64.0)
 
 
+def extract_frames_fast(
+    video_path: Path,
+    output_dir: Path,
+    duration: float,
+    interval: int = 15,
+    max_frames: int | None = None,
+    frame_format: str = 'jpg',
+    dedup_threshold: float | None = 0.85,
+) -> list[FrameInfo]:
+    """Extract frames using fast keyframe seeking.
+
+    Much faster than decode-based extraction for long videos. Seeks to
+    each timestamp independently, snapping to nearest keyframe.
+
+    Args:
+        video_path: Path to the local video file.
+        output_dir: Directory to save extracted frames.
+        duration: Video duration in seconds.
+        interval: Interval between frames in seconds.
+        max_frames: Maximum number of frames to extract.
+        frame_format: Output format ('jpg' or 'png').
+        dedup_threshold: Similarity threshold for deduplication (0.0-1.0).
+            Set to None to disable deduplication.
+
+    Returns:
+        List of FrameInfo objects with paths and timestamps.
+
+    Raises:
+        FrameExtractionError: If frame extraction fails.
+    """
+    if not check_ffmpeg():
+        raise FrameExtractionError(
+            "ffmpeg not found. Please install ffmpeg:\n"
+            "  macOS: brew install ffmpeg\n"
+            "  Ubuntu: sudo apt install ffmpeg\n"
+            "  Windows: https://ffmpeg.org/download.html"
+        )
+
+    if not video_path.exists():
+        raise FrameExtractionError(f"Video file not found: {video_path}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Calculate timestamps to extract
+    timestamps = []
+    t = 0.0
+    while t < duration:
+        timestamps.append(t)
+        t += interval
+        if max_frames and len(timestamps) >= max_frames:
+            break
+
+    # Extract frames using seek-based approach
+    frames: list[FrameInfo] = []
+    prev_hash: imagehash.ImageHash | None = None
+    frame_index = 0
+
+    for timestamp in timestamps:
+        # Use -ss before -i for fast input seeking (keyframe-based)
+        temp_path = output_dir / f'_temp_frame.{frame_format}'
+        cmd = [
+            'ffmpeg', '-y',
+            '-ss', str(timestamp),
+            '-i', str(video_path),
+            '-frames:v', '1',
+            '-q:v', '2',
+            str(temp_path),
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode != 0 or not temp_path.exists():
+                continue  # Skip failed frames
+
+        except subprocess.TimeoutExpired:
+            continue
+        except Exception:
+            continue
+
+        # Apply deduplication if enabled
+        if dedup_threshold is not None:
+            try:
+                current_hash = compute_phash(temp_path)
+            except Exception:
+                current_hash = None
+
+            if current_hash is not None and prev_hash is not None:
+                similarity = hash_similarity(prev_hash, current_hash)
+                if similarity >= dedup_threshold:
+                    temp_path.unlink(missing_ok=True)
+                    continue
+
+            prev_hash = current_hash
+
+        # Move to final location
+        final_name = f'frame-{frame_index:04d}.{frame_format}'
+        final_path = output_dir / final_name
+        shutil.move(str(temp_path), str(final_path))
+
+        frames.append(FrameInfo(path=final_path, timestamp=timestamp))
+        frame_index += 1
+
+    # Clean up any remaining temp file
+    temp_path = output_dir / f'_temp_frame.{frame_format}'
+    temp_path.unlink(missing_ok=True)
+
+    return frames
+
+
 def extract_frames_from_file(
     video_path: Path,
     output_dir: Path,

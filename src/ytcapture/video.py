@@ -10,7 +10,11 @@ from ytcapture.utils import extract_video_id
 
 @dataclass
 class VideoMetadata:
-    """Metadata extracted from a YouTube video."""
+    """Metadata extracted from a YouTube video.
+
+    Implements VideoMetadataProtocol for compatibility with generic
+    markdown generation.
+    """
 
     video_id: str
     title: str
@@ -18,6 +22,26 @@ class VideoMetadata:
     upload_date: str
     description: str
     duration: float
+
+    @property
+    def identifier(self) -> str:
+        """Unique identifier (video_id for YouTube)."""
+        return self.video_id
+
+    @property
+    def author(self) -> str:
+        """Author/channel name."""
+        return self.channel
+
+    @property
+    def source_date(self) -> str:
+        """Upload date in YYYYMMDD format."""
+        return self.upload_date
+
+    @property
+    def source_type(self) -> str:
+        """Source type identifier."""
+        return 'youtube'
 
 
 class VideoError(Exception):

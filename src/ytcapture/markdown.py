@@ -6,9 +6,9 @@ from pathlib import Path
 import yaml
 
 from ytcapture.frames import FrameInfo
+from ytcapture.metadata import VideoMetadataProtocol
 from ytcapture.transcript import TranscriptSegment
 from ytcapture.utils import format_date, format_timestamp, sanitize_title, truncate_title_words
-from ytcapture.video import VideoMetadata
 
 
 def align_transcript_to_frames(
@@ -57,33 +57,40 @@ def align_transcript_to_frames(
 
 
 def generate_frontmatter(
-    metadata: VideoMetadata,
-    url: str,
+    metadata: VideoMetadataProtocol,
+    url: str | None = None,
 ) -> str:
     """Generate YAML frontmatter for Obsidian.
 
     Args:
-        metadata: Video metadata object.
-        url: Original YouTube URL.
+        metadata: Any object implementing VideoMetadataProtocol.
+        url: Optional source URL (for YouTube videos).
 
     Returns:
         YAML frontmatter string including delimiters.
     """
-    # Truncate description if too long
-    description = metadata.description
-    if len(description) > 200:
-        description = description[:197] + '...'
-
-    # Build frontmatter dict
-    frontmatter = {
+    # Build frontmatter dict with required fields
+    frontmatter: dict[str, str | list[str]] = {
         'title': metadata.title,
-        'source': url,
-        'author': [metadata.channel],
         'created': datetime.now().strftime('%Y-%m-%d'),
-        'published': format_date(metadata.upload_date),
-        'description': description,
-        'tags': ['youtube'],
+        'published': format_date(metadata.source_date),
+        'tags': [metadata.source_type],
     }
+
+    # Add optional source URL
+    if url:
+        frontmatter['source'] = url
+
+    # Add optional author
+    if metadata.author:
+        frontmatter['author'] = [metadata.author]
+
+    # Add optional description (truncated)
+    if metadata.description:
+        description = metadata.description
+        if len(description) > 200:
+            description = description[:197] + '...'
+        frontmatter['description'] = description
 
     # Remove empty values
     frontmatter = {k: v for k, v in frontmatter.items() if v}
@@ -101,13 +108,13 @@ def generate_frontmatter(
 
 def generate_markdown_body(
     grouped_data: list[tuple[FrameInfo, list[TranscriptSegment]]],
-    video_id: str,
+    identifier: str,
 ) -> str:
     """Generate markdown body with embedded frames and transcript.
 
     Args:
         grouped_data: List of (frame, segments) tuples from align_transcript_to_frames.
-        video_id: YouTube video ID for constructing embed paths.
+        identifier: Unique identifier for constructing embed paths (video_id or filename stem).
 
     Returns:
         Markdown body string.
@@ -120,7 +127,7 @@ def generate_markdown_body(
         section = f'\n## {timestamp_str}\n\n'
 
         # Frame embed (Obsidian syntax)
-        relative_path = f'images/{video_id}/{frame.path.name}'
+        relative_path = f'images/{identifier}/{frame.path.name}'
         section += f'![[{relative_path}]]\n\n'
 
         # Transcript text for this frame's time window
@@ -135,13 +142,13 @@ def generate_markdown_body(
 
 def generate_frames_only(
     frames: list[FrameInfo],
-    video_id: str,
+    identifier: str,
 ) -> str:
     """Generate markdown body with frames only (no transcript).
 
     Args:
         frames: List of frame info objects.
-        video_id: YouTube video ID for constructing embed paths.
+        identifier: Unique identifier for constructing embed paths (video_id or filename stem).
 
     Returns:
         Markdown body string.
@@ -150,7 +157,7 @@ def generate_frames_only(
 
     for frame in frames:
         timestamp_str = format_timestamp(frame.timestamp)
-        relative_path = f'images/{video_id}/{frame.path.name}'
+        relative_path = f'images/{identifier}/{frame.path.name}'
 
         section = f'\n## {timestamp_str}\n\n![[{relative_path}]]\n'
         sections.append(section)
@@ -158,24 +165,28 @@ def generate_frames_only(
     return ''.join(sections)
 
 
-def generate_markdown_filename(metadata: VideoMetadata) -> str:
+def generate_markdown_filename(metadata: VideoMetadataProtocol) -> str:
     """Generate the markdown filename from video metadata.
 
     Args:
-        metadata: Video metadata object.
+        metadata: Any object implementing VideoMetadataProtocol.
 
     Returns:
         Filename string (without directory path).
     """
     short_title = sanitize_title(truncate_title_words(metadata.title, 6))
-    channel = sanitize_title(metadata.channel)
-    date_str = metadata.upload_date  # Already YYYYMMDD from yt-dlp
-    return f'{short_title} ({channel}) {date_str}.md'
+    date_str = metadata.source_date  # YYYYMMDD format
+
+    if metadata.author:
+        author = sanitize_title(metadata.author)
+        return f'{short_title} ({author}) {date_str}.md'
+    else:
+        return f'{short_title} {date_str}.md'
 
 
 def generate_markdown_file(
-    metadata: VideoMetadata,
-    url: str,
+    metadata: VideoMetadataProtocol,
+    url: str | None,
     transcript: list[TranscriptSegment] | None,
     frames: list[FrameInfo],
     output_dir: Path,
@@ -184,8 +195,8 @@ def generate_markdown_file(
     """Generate complete markdown file.
 
     Args:
-        metadata: Video metadata object.
-        url: Original YouTube URL.
+        metadata: Any object implementing VideoMetadataProtocol.
+        url: Optional source URL (for YouTube videos).
         transcript: List of transcript segments, or None.
         frames: List of frame info objects.
         output_dir: Directory to save the markdown file.
@@ -194,7 +205,7 @@ def generate_markdown_file(
     Returns:
         Path to the generated markdown file.
     """
-    video_id = metadata.video_id
+    identifier = metadata.identifier
 
     # Generate frontmatter
     frontmatter = generate_frontmatter(metadata, url)
@@ -202,9 +213,9 @@ def generate_markdown_file(
     # Generate body
     if transcript and frames:
         grouped = align_transcript_to_frames(transcript, frames)
-        body = generate_markdown_body(grouped, video_id)
+        body = generate_markdown_body(grouped, identifier)
     elif frames:
-        body = generate_frames_only(frames, video_id)
+        body = generate_frames_only(frames, identifier)
     else:
         # No frames or transcript
         body = '\n*No frames or transcript available.*\n'
