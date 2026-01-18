@@ -1,10 +1,14 @@
 # ytcapture
 
-Extract video frames and transcripts from YouTube videos into Obsidian-compatible markdown notes.
+Extract video frames and transcripts into Obsidian-compatible markdown notes.
+
+This package provides two CLI tools:
+- **ytcapture** - Process YouTube videos (with transcripts)
+- **vidcapture** - Process local video files
 
 ## Why ytcapture?
 
-Watching a lecture, tutorial, or presentation on YouTube? **ytcapture** turns any video into a searchable, skimmable markdown note with:
+Watching a lecture, tutorial, or presentation? **ytcapture** and **vidcapture** turn any video into a searchable, skimmable markdown note with:
 
 - **Embedded frame images** at regular intervals so you can see what's on screen
 - **Timestamped transcript segments** aligned to each frame
@@ -40,8 +44,10 @@ pip install -e .
 
 ## Usage
 
+### ytcapture (YouTube videos)
+
 ```bash
-# Basic usage - outputs to current directory
+# Basic usage - outputs to vault root (or current directory)
 ytcapture "https://www.youtube.com/watch?v=VIDEO_ID"
 
 # Multiple videos at once
@@ -56,7 +62,7 @@ ytcapture
 # Skip confirmation for large playlists (>10 videos)
 ytcapture "https://www.youtube.com/playlist?list=PLAYLIST_ID" -y
 
-# Specify output directory
+# Specify output directory (vault-relative unless absolute path)
 ytcapture URL -o my-notes/
 
 # Adjust frame interval (default: 15 seconds)
@@ -64,6 +70,22 @@ ytcapture URL --interval 30
 
 # Extract more frames with aggressive deduplication
 ytcapture URL --interval 5 --dedup-threshold 0.80
+```
+
+### vidcapture (local video files)
+
+```bash
+# Basic usage
+vidcapture meeting.mp4
+
+# Multiple files
+vidcapture video1.mp4 video2.mkv -o notes/
+
+# Fast mode for long videos (uses keyframe seeking, less accurate timestamps)
+vidcapture long-workshop.mp4 --fast --interval 60
+
+# JSON output for scripting
+vidcapture video.mp4 --json
 ```
 
 ## Output Structure
@@ -116,11 +138,55 @@ Welcome to this tutorial on neural networks. Today we'll cover the basics.
 Let's start by understanding what a neuron is and how it processes information.
 ```
 
+## Configuration
+
+Both tools use a shared config file at `~/.ytcapture.yml` (auto-created on first run):
+
+```yaml
+# Vault root directory - relative paths in --output are relative to this
+vault: ~/Documents/Obsidian/Notes
+
+# Default output directory (vault-relative)
+# output: Inbox/VideoCaptures
+
+# Frame extraction defaults
+interval: 15           # Seconds between frames
+frame_format: jpg      # jpg or png
+dedup_threshold: 0.85  # 0.0-1.0, higher = more aggressive
+
+# ytcapture-specific
+language: en
+prefer_manual: false
+keep_video: false
+
+# vidcapture-specific
+fast: false            # Use fast keyframe seeking
+```
+
+CLI options override config values. The `--help` output shows your current defaults from config.
+
+## Shell Completion
+
+Bash completion is available for both commands:
+
+```bash
+# Install completions
+ytcapture completion bash --install
+vidcapture completion bash --install
+
+# Restart your shell or source your bashrc
+source ~/.bashrc
+```
+
+Tab completion for `-o/--output` is vault-aware (completes directories relative to your vault).
+
 ## Options
+
+### ytcapture options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-o, --output` | `.` | Output directory |
+| `-o, --output` | vault root | Output directory (vault-relative unless absolute) |
 | `--interval` | 15 | Frame extraction interval in seconds |
 | `--max-frames` | None | Maximum number of frames to extract |
 | `--frame-format` | jpg | Frame format: `jpg` or `png` |
@@ -131,7 +197,20 @@ Let's start by understanding what a neuron is and how it processes information.
 | `--keep-video` | - | Keep downloaded video file after frame extraction |
 | `-y, --yes` | - | Skip confirmation prompt for large batches (>10 videos) |
 | `-v, --verbose` | - | Verbose output |
-| `-h, --help` | - | Show help message |
+
+### vidcapture options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output` | vault root | Output directory (vault-relative unless absolute) |
+| `--interval` | 15 | Frame extraction interval in seconds |
+| `--max-frames` | None | Maximum number of frames to extract |
+| `--frame-format` | jpg | Frame format: `jpg` or `png` |
+| `--dedup-threshold` | 0.85 | Similarity threshold for removing duplicate frames (0.0-1.0) |
+| `--no-dedup` | - | Disable frame deduplication |
+| `--fast` | - | Fast extraction using keyframe seeking (recommended for long videos) |
+| `--json` | - | Output JSON instead of console output (for scripting) |
+| `-v, --verbose` | - | Verbose output |
 
 ## Tips
 

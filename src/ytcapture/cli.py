@@ -11,6 +11,15 @@ import click
 from rich.console import Console
 
 from ytcapture import __version__
+from ytcapture.config import (
+    config_was_auto_created,
+    get_config_for_defaults,
+    get_config_path,
+    resolve_output_path,
+)
+
+# Load config at module level for CLI option defaults
+_cfg = get_config_for_defaults()
 from ytcapture.frames import FrameExtractionError, extract_frames_fast, extract_frames_from_file
 from ytcapture.local import LocalVideoError, LocalVideoMetadata, get_local_video_metadata
 from ytcapture.markdown import generate_markdown_file, generate_markdown_filename
@@ -97,30 +106,34 @@ def common_frame_options(func: F) -> F:
     func = click.option(
         '-o', '--output',
         type=click.Path(),
-        help='Output directory (default: current directory)',
+        help='Output directory (vault-relative unless absolute path)',
     )(func)
     func = click.option(
         '--interval',
         type=int,
-        default=15,
-        help='Frame extraction interval in seconds (default: 15)',
+        default=_cfg.get("interval", 15),
+        show_default=True,
+        help='Frame extraction interval in seconds',
     )(func)
     func = click.option(
         '--max-frames',
         type=int,
+        default=_cfg.get("max_frames"),
         help='Maximum number of frames to extract',
     )(func)
     func = click.option(
         '--frame-format',
         type=click.Choice(['jpg', 'png']),
-        default='jpg',
-        help='Frame image format (default: jpg)',
+        default=_cfg.get("frame_format", "jpg"),
+        show_default=True,
+        help='Frame image format',
     )(func)
     func = click.option(
         '--dedup-threshold',
         type=float,
-        default=0.85,
-        help='Similarity threshold for frame deduplication (0.0-1.0, default: 0.85)',
+        default=_cfg.get("dedup_threshold", 0.85),
+        show_default=True,
+        help='Similarity threshold for frame deduplication (0.0-1.0)',
     )(func)
     func = click.option(
         '--no-dedup',
@@ -268,40 +281,46 @@ def process_video(
 @click.option(
     '-o', '--output',
     type=click.Path(),
-    help='Output directory (default: current directory)',
+    help='Output directory (vault-relative unless absolute path)',
 )
 @click.option(
     '--interval',
     type=int,
-    default=15,
-    help='Frame extraction interval in seconds (default: 15)',
+    default=_cfg.get("interval", 15),
+    show_default=True,
+    help='Frame extraction interval in seconds',
 )
 @click.option(
     '--max-frames',
     type=int,
+    default=_cfg.get("max_frames"),
     help='Maximum number of frames to extract',
 )
 @click.option(
     '--frame-format',
     type=click.Choice(['jpg', 'png']),
-    default='jpg',
-    help='Frame image format (default: jpg)',
+    default=_cfg.get("frame_format", "jpg"),
+    show_default=True,
+    help='Frame image format',
 )
 @click.option(
     '--language',
-    default='en',
-    help='Transcript language code (default: en)',
+    default=_cfg.get("language", "en"),
+    show_default=True,
+    help='Transcript language code',
 )
 @click.option(
     '--prefer-manual',
     is_flag=True,
+    default=_cfg.get("prefer_manual", False),
     help='Only use manual transcripts (fail if unavailable)',
 )
 @click.option(
     '--dedup-threshold',
     type=float,
-    default=0.85,
-    help='Similarity threshold for frame deduplication (0.0-1.0, default: 0.85)',
+    default=_cfg.get("dedup_threshold", 0.85),
+    show_default=True,
+    help='Similarity threshold for frame deduplication (0.0-1.0)',
 )
 @click.option(
     '--no-dedup',
@@ -311,6 +330,7 @@ def process_video(
 @click.option(
     '--keep-video',
     is_flag=True,
+    default=_cfg.get("keep_video", False),
     help='Keep downloaded video file after frame extraction',
 )
 @click.option(
@@ -353,6 +373,10 @@ def main(
         ytcapture URL1 URL2 URL3
         ytcapture "https://www.youtube.com/playlist?list=PLAYLIST_ID"
     """
+    # Show message if config was auto-created on this run
+    if config_was_auto_created():
+        console.print(f"[dim]Created config:[/] {get_config_path()}")
+
     # 1. Collect URLs from arguments and/or clipboard
     url_list = list(urls)
     if not url_list:
@@ -365,11 +389,18 @@ def main(
                 "No URLs provided. Pass YouTube URLs as arguments or copy one to clipboard."
             )
 
-    # 2. Determine output directory
+    # 2. Determine output directory (vault-relative path handling)
+    vault = Path(_cfg.get("vault", ".")).expanduser()
     if output:
-        output_dir = Path(output)
+        # CLI --output provided: resolve relative to vault
+        output_dir = resolve_output_path(output, vault)
+    elif _cfg.get("output"):
+        # Config output setting: resolve relative to vault
+        output_dir = resolve_output_path(_cfg["output"], vault)
     else:
-        output_dir = Path('.')
+        # Default to vault root
+        output_dir = vault
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     console.print(f"[dim]Output directory:[/] {output_dir.resolve()}/")
 
@@ -561,6 +592,7 @@ def process_local_video(
 @click.option(
     '--fast',
     is_flag=True,
+    default=_cfg.get("fast", False),
     help='Fast extraction using keyframe seeking (recommended for long videos)',
 )
 @click.option(
@@ -596,6 +628,13 @@ def vidcapture_main(
         vidcapture recording.mov --interval 30 --max-frames 50
         vidcapture long-workshop.mp4 --fast --interval 60
     """
+    # Use quiet console for JSON output
+    out_console = Console(quiet=True) if json_output else console
+
+    # Show message if config was auto-created on this run
+    if config_was_auto_created() and not json_output:
+        out_console.print(f"[dim]Created config:[/] {get_config_path()}")
+
     if not files:
         if json_output:
             print(json.dumps({"status": "error", "error": "No video files provided"}))
@@ -604,14 +643,18 @@ def vidcapture_main(
             "No video files provided. Pass paths to video files as arguments."
         )
 
-    # Determine output directory
+    # Determine output directory (vault-relative path handling)
+    vault = Path(_cfg.get("vault", ".")).expanduser()
     if output:
-        output_dir = Path(output)
+        # CLI --output provided: resolve relative to vault
+        output_dir = resolve_output_path(output, vault)
+    elif _cfg.get("output"):
+        # Config output setting: resolve relative to vault
+        output_dir = resolve_output_path(_cfg["output"], vault)
     else:
-        output_dir = Path('.')
-
-    # Use quiet console for JSON output
-    out_console = Console(quiet=True) if json_output else console
+        # Default to vault root
+        output_dir = vault
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     out_console.print(f"[dim]Output directory:[/] {output_dir.resolve()}/")
 

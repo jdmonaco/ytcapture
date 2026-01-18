@@ -24,7 +24,25 @@ _vidcapture_completions() {
     case "$prev" in
         -o|--output)
             compopt -o nospace
-            COMPREPLY=($(compgen -d -- "$cur"))
+            local IFS=$'\n'
+
+            if [[ "$cur" == /* ]] || [[ "$cur" == ~* ]]; then
+                # Absolute path - expand ~ and complete filesystem
+                local search_path="${cur/#\~/$HOME}"
+                COMPREPLY=($(compgen -d -- "$search_path" 2>/dev/null))
+            else
+                # Vault-relative - complete from vault directory
+                local vault=""
+                if [[ -f ~/.ytcapture.yml ]]; then
+                    vault=$(awk '/^vault:/ {print $2}' ~/.ytcapture.yml 2>/dev/null | tr -d "\"'")
+                    vault="${vault/#\~/$HOME}"
+                fi
+                if [[ -n "$vault" && -d "$vault" ]]; then
+                    COMPREPLY=($(cd "$vault" && compgen -d -- "$cur" 2>/dev/null))
+                else
+                    COMPREPLY=($(compgen -d -- "$cur" 2>/dev/null))
+                fi
+            fi
             COMPREPLY=("${COMPREPLY[@]/%//}")
             return 0
             ;;
