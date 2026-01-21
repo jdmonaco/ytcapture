@@ -1,6 +1,6 @@
 [project]
 name = "ytcapture"
-version = "0.1.2"
+version = "0.2.0"
 description = "Extract video frames and transcripts from YouTube videos into Obsidian-compatible markdown"
 authors = [
     { name = "Joe Monaco", email = "joe@selfmotion.net" }
