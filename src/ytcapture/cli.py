@@ -101,6 +101,47 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024 / 1024:.1f} MB"
 
 
+def format_path(path: Path, vault: Path | None = None) -> str:
+    """Format a path for display, shortening long paths.
+
+    - If path is within vault, show relative to vault root
+    - Replace home directory with ~
+    - Replace OneDrive CloudStorage path with ~/OneDrive
+    """
+    path_str = str(path.resolve())
+    home = str(Path.home())
+
+    # Check if path is within vault - show relative
+    if vault:
+        vault_str = str(vault.resolve())
+        if path_str.startswith(vault_str):
+            rel_path = path_str[len(vault_str):].lstrip("/")
+            # Show vault name + relative path
+            vault_name = vault.name
+            if rel_path:
+                return f"{vault_name}/{rel_path}"
+            return vault_name
+
+    # Replace OneDrive CloudStorage path with ~/OneDrive
+    onedrive_pattern = f"{home}/Library/CloudStorage/OneDrive-"
+    if onedrive_pattern in path_str:
+        # Find the OneDrive folder and replace everything up to it
+        idx = path_str.find(onedrive_pattern)
+        # Find the end of the OneDrive folder name (next /)
+        end_idx = path_str.find("/", idx + len(onedrive_pattern))
+        if end_idx != -1:
+            path_str = "~/OneDrive" + path_str[end_idx:]
+        else:
+            path_str = "~/OneDrive"
+        return path_str
+
+    # Replace home directory with ~
+    if path_str.startswith(home):
+        path_str = "~" + path_str[len(home):]
+
+    return path_str
+
+
 def common_frame_options(func: F) -> F:
     """Decorator for frame extraction options shared by ytcapture and vidcapture."""
     func = click.option(
@@ -402,7 +443,7 @@ def main(
         output_dir = vault
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(f"[dim]Output directory:[/] {output_dir.resolve()}/")
+    console.print(f"[dim]Output directory:[/] {format_path(output_dir, vault)}/")
 
     # 3. Classify and expand URLs
     video_urls: list[str] = []
@@ -461,10 +502,10 @@ def main(
                 no_dedup,
                 keep_video,
             )
-            console.print(f"[green]✓[/] {md_file.name}\n")
+            console.print(f"[green]✓[/] {md_file.name}")
             success_count += 1
         except (VideoError, FrameExtractionError) as e:
-            console.print(f"[red]✗[/] Failed: {e}\n")
+            console.print(f"[red]✗[/] Failed: {e}")
             error_count += 1
 
     # 7. Summary
@@ -656,7 +697,7 @@ def vidcapture_main(
         output_dir = vault
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    out_console.print(f"[dim]Output directory:[/] {output_dir.resolve()}/")
+    out_console.print(f"[dim]Output directory:[/] {format_path(output_dir, vault)}/")
 
     # Process each video file
     out_console.print(f"\n[bold]Processing {len(files)} video file(s)...[/]\n")
@@ -683,7 +724,7 @@ def vidcapture_main(
             if json_output:
                 results.append(result)  # type: ignore[arg-type]
             else:
-                out_console.print(f"[green]✓[/] {result.name}\n")  # type: ignore[union-attr]
+                out_console.print(f"[green]✓[/] {result.name}")  # type: ignore[union-attr]
             success_count += 1
         except (LocalVideoError, FrameExtractionError) as e:
             if json_output:
@@ -693,7 +734,7 @@ def vidcapture_main(
                     "error": str(e),
                 })
             else:
-                out_console.print(f"[red]✗[/] Failed: {e}\n")
+                out_console.print(f"[red]✗[/] Failed: {e}")
             error_count += 1
 
     # JSON output
