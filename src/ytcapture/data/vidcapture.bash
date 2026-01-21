@@ -35,7 +35,9 @@ _vidcapture_completions() {
                 local vault=""
                 if [[ -f ~/.ytcapture.yml ]]; then
                     vault=$(awk '/^vault:/ {print $2}' ~/.ytcapture.yml 2>/dev/null | tr -d "\"'")
+                    # Expand ~ and environment variables like $HOME
                     vault="${vault/#\~/$HOME}"
+                    vault=$(eval echo "$vault" 2>/dev/null)
                 fi
                 if [[ -n "$vault" && -d "$vault" ]]; then
                     COMPREPLY=($(cd "$vault" && compgen -d -- "$cur" 2>/dev/null))
