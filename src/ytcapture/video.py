@@ -189,7 +189,8 @@ def download_video(url: str, output_dir: Path) -> Path:
         'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/'
         '18/best'
     )
-    output_template = str(output_dir / '%(id)s.%(ext)s')
+    # Use .mp4 extension since --merge-output-format mp4 forces mp4 output
+    output_template = str(output_dir / '%(id)s.mp4')
 
     cmd = [
         'yt-dlp',

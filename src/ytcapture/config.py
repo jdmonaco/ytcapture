@@ -1,5 +1,6 @@
 """Configuration file handling for ytcapture/vidcapture."""
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -104,9 +105,9 @@ def load_config(path: Path | None = None) -> tuple[dict[str, Any], bool]:
     # Merge file config into defaults
     config = _merge_dicts(config, file_config)
 
-    # Expand vault path
+    # Expand vault path (both ~ and environment variables like $HOME)
     if "vault" in config and config["vault"]:
-        config["vault"] = str(Path(config["vault"]).expanduser())
+        config["vault"] = os.path.expandvars(str(Path(config["vault"]).expanduser()))
 
     return config, was_created
 
@@ -191,9 +192,11 @@ def get_config_for_defaults() -> dict[str, Any]:
                 # On error, just use defaults
                 pass
 
-        # Expand vault path
+        # Expand vault path (both ~ and environment variables like $HOME)
         if _cached_config.get("vault"):
-            _cached_config["vault"] = str(Path(_cached_config["vault"]).expanduser())
+            _cached_config["vault"] = os.path.expandvars(
+                str(Path(_cached_config["vault"]).expanduser())
+            )
 
     return _cached_config
 
