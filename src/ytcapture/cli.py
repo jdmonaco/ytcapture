@@ -527,6 +527,7 @@ def process_local_video(
     no_dedup: bool,
     fast: bool = False,
     json_output: bool = False,
+    force: bool = False,
 ) -> dict | Path:
     """Process a single local video file.
 
@@ -540,6 +541,7 @@ def process_local_video(
         no_dedup: Disable frame deduplication.
         fast: Use fast keyframe-seeking extraction (less accurate timestamps).
         json_output: If True, return dict instead of Path and suppress console output.
+        force: If True, overwrite existing output files without prompting.
 
     Returns:
         Path to the generated markdown file, or dict with status/metadata if json_output.
@@ -558,6 +560,19 @@ def process_local_video(
     out_console.print("[green]✓[/] Extracted video metadata")
     out_console.print(f"  [dim]Title:[/] {metadata.title}")
     out_console.print(f"  [dim]Duration:[/] {metadata.duration:.1f}s")
+
+    # Check if output file already exists
+    md_filename = generate_markdown_filename(metadata)
+    md_filepath = output_dir / md_filename
+    if md_filepath.exists() and not force:
+        if json_output:
+            return {
+                "status": "error",
+                "video": str(video_path.resolve()),
+                "error": f"Output file exists: {md_filename}. Use -f/--force to overwrite.",
+            }
+        if not click.confirm(f"Output file exists: {md_filename}\nOverwrite?", default=False):
+            raise click.ClickException("Output file exists. Use -f/--force to overwrite.")
 
     # 2. Create directory structure (with collision handling)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -643,6 +658,11 @@ def process_local_video(
     is_flag=True,
     help='Output JSON instead of rich console output (for programmatic use)',
 )
+@click.option(
+    '-f', '--force',
+    is_flag=True,
+    help='Overwrite existing output files without prompting',
+)
 def vidcapture_main(
     files: tuple[str, ...],
     output: str | None,
@@ -654,6 +674,7 @@ def vidcapture_main(
     verbose: bool,
     fast: bool,
     json_output: bool,
+    force: bool,
 ) -> None:
     """Extract frames from local video files.
 
@@ -720,6 +741,7 @@ def vidcapture_main(
                 no_dedup,
                 fast,
                 json_output,
+                force,
             )
             if json_output:
                 results.append(result)  # type: ignore[arg-type]
