@@ -23,29 +23,8 @@ _ytcapture_completions() {
     # Flags requiring directory argument
     case "$prev" in
         -o|--output)
-            compopt -o nospace
-            local IFS=$'\n'
-
-            if [[ "$cur" == /* ]] || [[ "$cur" == ~* ]]; then
-                # Absolute path - expand ~ and complete filesystem
-                local search_path="${cur/#\~/$HOME}"
-                COMPREPLY=($(compgen -d -- "$search_path" 2>/dev/null))
-            else
-                # Vault-relative - complete from vault directory
-                local vault=""
-                if [[ -f ~/.ytcapture.yml ]]; then
-                    vault=$(awk '/^vault:/ {print $2}' ~/.ytcapture.yml 2>/dev/null | tr -d "\"'")
-                    # Expand ~ and environment variables like $HOME
-                    vault="${vault/#\~/$HOME}"
-                    vault=$(eval echo "$vault" 2>/dev/null)
-                fi
-                if [[ -n "$vault" && -d "$vault" ]]; then
-                    COMPREPLY=($(cd "$vault" && compgen -d -- "$cur" 2>/dev/null))
-                else
-                    COMPREPLY=($(compgen -d -- "$cur" 2>/dev/null))
-                fi
-            fi
-            COMPREPLY=("${COMPREPLY[@]/%//}")
+            compopt -o filenames -o nospace
+            mapfile -t COMPREPLY < <(compgen -d -- "$cur")
             return 0
             ;;
         --language)

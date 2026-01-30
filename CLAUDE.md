@@ -101,7 +101,7 @@ Let's start by understanding the basic architecture.
 ### ytcapture (YouTube)
 
 ```bash
-# Basic usage - outputs to vault root (or current directory)
+# Basic usage - outputs to current directory
 ytcapture "https://youtube.com/watch?v=..."
 
 # Multiple videos or playlists
@@ -110,7 +110,7 @@ ytcapture URL1 URL2 "https://youtube.com/playlist?list=..."
 # On macOS, reads URL from clipboard if no arguments
 ytcapture
 
-# Specify output directory (vault-relative unless absolute)
+# Specify output directory (relative to cwd or absolute)
 ytcapture URL -o captures/
 
 # Frame extraction options
@@ -147,11 +147,11 @@ vidcapture video.mp4 --json
 Both tools use a shared config file at `~/.ytcapture.yml` (auto-created on first run).
 
 ```yaml
-# Vault root directory for output (~ expanded)
+# Vault root directory (~ expanded, used for path display shortening)
 vault: ~/Documents/Obsidian/Notes
 
-# Default output directory (vault-relative)
-output: Inbox/VideoCaptures
+# Default output directory (relative to cwd or absolute)
+output: VideoCaptures
 
 # Frame extraction defaults
 interval: 15           # Seconds between frames
@@ -182,7 +182,7 @@ vidcapture completion bash --install
 ytcapture completion bash > ~/.local/share/bash-completion/completions/ytcapture
 ```
 
-Completion for `-o/--output` is vault-aware (completes directories relative to vault).
+Completion for `-o/--output` completes directories relative to cwd.
 
 ## Technical Requirements
 
@@ -244,7 +244,7 @@ Completion for `-o/--output` is vault-aware (completes directories relative to v
 
 - **Protocol-based abstraction**: `VideoMetadataProtocol` allows both YouTube and local video metadata to work with the same markdown generation code
 - **Module-level config loading**: Config is loaded once at import time for dynamic CLI defaults
-- **Vault-relative paths**: Output paths can be relative to a configured vault directory
+- **Path display**: Uses `shorten_path()` for consistent display ($HOME → ~, OneDrive → ~/OneDrive)
 
 ## Testing Strategy
 
@@ -275,8 +275,8 @@ Completed features:
 - ✅ Smart frame deduplication
 - ✅ Fast keyframe-seeking mode for long videos
 - ✅ Global configuration file with vault support
-- ✅ Vault-relative path handling
-- ✅ Bash completion with vault-aware directory completion
+- ✅ Cwd-relative path handling for -o/--output
+- ✅ Bash completion with standard directory completion
 - ✅ JSON output mode for vidcapture
 - ✅ Multiple video/playlist processing
 

@@ -101,45 +101,37 @@ def format_size(size_bytes: int) -> str:
         return f"{size_bytes / 1024 / 1024:.1f} MB"
 
 
-def format_path(path: Path, vault: Path | None = None) -> str:
-    """Format a path for display, shortening long paths.
+def shorten_path(path: str) -> str:
+    """Shorten paths for display: $HOME -> ~, OneDrive CloudStorage -> ~/OneDrive.
 
-    - If path is within vault, show relative to vault root
-    - Replace home directory with ~
-    - Replace OneDrive CloudStorage path with ~/OneDrive
+    Handles macOS OneDrive CloudStorage paths like:
+    ~/Library/CloudStorage/OneDrive-OrgName/path/to/file
+    -> ~/OneDrive/path/to/file
+
+    Args:
+        path: Path string to shorten
+
+    Returns:
+        Shortened path string
     """
-    path_str = str(path.resolve())
     home = str(Path.home())
 
-    # Check if path is within vault - show relative
-    if vault:
-        vault_str = str(vault.resolve())
-        if path_str.startswith(vault_str):
-            rel_path = path_str[len(vault_str):].lstrip("/")
-            # Show vault name + relative path
-            vault_name = vault.name
-            if rel_path:
-                return f"{vault_name}/{rel_path}"
-            return vault_name
+    # OneDrive CloudStorage pattern (macOS)
+    onedrive_prefix = f"{home}/Library/CloudStorage/OneDrive-"
+    if path.startswith(onedrive_prefix):
+        rest = path[len(onedrive_prefix):]
+        if "/" in rest:
+            _, subpath = rest.split("/", 1)
+            return f"~/OneDrive/{subpath}"
+        return f"~/OneDrive/{rest}"
 
-    # Replace OneDrive CloudStorage path with ~/OneDrive
-    onedrive_pattern = f"{home}/Library/CloudStorage/OneDrive-"
-    if onedrive_pattern in path_str:
-        # Find the OneDrive folder and replace everything up to it
-        idx = path_str.find(onedrive_pattern)
-        # Find the end of the OneDrive folder name (next /)
-        end_idx = path_str.find("/", idx + len(onedrive_pattern))
-        if end_idx != -1:
-            path_str = "~/OneDrive" + path_str[end_idx:]
-        else:
-            path_str = "~/OneDrive"
-        return path_str
+    # Standard home shortening
+    if path.startswith(home + "/"):
+        return "~" + path[len(home):]
+    elif path == home:
+        return "~"
 
-    # Replace home directory with ~
-    if path_str.startswith(home):
-        path_str = "~" + path_str[len(home):]
-
-    return path_str
+    return path
 
 
 def common_frame_options(func: F) -> F:
@@ -147,7 +139,7 @@ def common_frame_options(func: F) -> F:
     func = click.option(
         '-o', '--output',
         type=click.Path(),
-        help='Output directory (vault-relative unless absolute path)',
+        help='Output directory (relative to cwd or absolute path)',
     )(func)
     func = click.option(
         '--interval',
@@ -323,7 +315,7 @@ def process_video(
 @click.option(
     '-o', '--output',
     type=click.Path(),
-    help='Output directory (vault-relative unless absolute path)',
+    help='Output directory (relative to cwd or absolute path)',
 )
 @click.option(
     '--interval',
@@ -430,20 +422,16 @@ def main(
                 "No URLs provided. Pass YouTube URLs as arguments or copy one to clipboard."
             )
 
-    # 2. Determine output directory (vault-relative path handling)
-    vault = Path(_cfg.get("vault", ".")).expanduser()
+    # 2. Determine output directory
     if output:
-        # CLI --output provided: resolve relative to vault
-        output_dir = resolve_output_path(output, vault)
+        output_dir = resolve_output_path(output)
     elif _cfg.get("output"):
-        # Config output setting: resolve relative to vault
-        output_dir = resolve_output_path(_cfg["output"], vault)
+        output_dir = resolve_output_path(_cfg["output"])
     else:
-        # Default to vault root
-        output_dir = vault
+        output_dir = Path.cwd()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print(f"[dim]Output directory:[/] {format_path(output_dir, vault)}/")
+    console.print(f"[dim]Output directory:[/] {shorten_path(str(output_dir))}/")
 
     # 3. Classify and expand URLs
     video_urls: list[str] = []
@@ -705,20 +693,16 @@ def vidcapture_main(
             "No video files provided. Pass paths to video files as arguments."
         )
 
-    # Determine output directory (vault-relative path handling)
-    vault = Path(_cfg.get("vault", ".")).expanduser()
+    # Determine output directory
     if output:
-        # CLI --output provided: resolve relative to vault
-        output_dir = resolve_output_path(output, vault)
+        output_dir = resolve_output_path(output)
     elif _cfg.get("output"):
-        # Config output setting: resolve relative to vault
-        output_dir = resolve_output_path(_cfg["output"], vault)
+        output_dir = resolve_output_path(_cfg["output"])
     else:
-        # Default to vault root
-        output_dir = vault
+        output_dir = Path.cwd()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    out_console.print(f"[dim]Output directory:[/] {format_path(output_dir, vault)}/")
+    out_console.print(f"[dim]Output directory:[/] {shorten_path(str(output_dir))}/")
 
     # Process each video file
     out_console.print(f"\n[bold]Processing {len(files)} video file(s)...[/]\n")

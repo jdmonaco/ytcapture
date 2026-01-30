@@ -31,13 +31,12 @@ DEFAULT_CONFIG_YAML = """\
 # Settings can be removed or commented out to use built-in defaults.
 # Built-in defaults are noted in [brackets] for each setting.
 
-# Vault root directory for output (~ expanded)
-# Relative paths in --output are relative to this
+# Vault root directory (~ expanded, used for path display shortening)
 vault: .  # [.]
 
-# Default output directory (vault-relative if not absolute)
+# Default output directory (relative to cwd or absolute path)
 # If set, used when --output is not specified on command line
-# output: Inbox/VideoCaptures  # [none - uses vault root]
+# output: VideoCaptures  # [none - uses cwd]
 
 # Frame extraction defaults
 interval: 15           # Seconds between frames [15]
@@ -133,22 +132,21 @@ def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
     return result
 
 
-def resolve_output_path(folder: str, vault: Path) -> Path:
-    """Resolve output folder path relative to vault.
+def resolve_output_path(folder: str) -> Path:
+    """Resolve output folder path relative to cwd.
+
+    - Absolute paths: used as-is
+    - Tilde paths: expanded
+    - Relative paths: resolved from cwd
 
     Args:
-        folder: Folder path (relative to vault or absolute)
-        vault: Base vault path
+        folder: Folder path (relative to cwd or absolute)
 
     Returns:
         Resolved Path object (directory will be created if needed)
     """
     folder_path = Path(folder).expanduser()
-
-    if folder_path.is_absolute():
-        output_path = folder_path
-    else:
-        output_path = vault / folder_path
+    output_path = folder_path.resolve()
 
     # Create directory if it doesn't exist
     output_path.mkdir(parents=True, exist_ok=True)
