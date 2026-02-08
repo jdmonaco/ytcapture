@@ -1,2 +1,7 @@
 # Dev files
 PLAN.md
+
+# Test/coverage artifacts
+.coverage
+htmlcov/
+.pytest_cache/
