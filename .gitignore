@@ -1,6 +1,17 @@
 # Dev files
 PLAN.md
 
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Type checking
+.mypy_cache/
+
 # Test/coverage artifacts
 .coverage
 htmlcov/

@@ -193,7 +193,7 @@ Completion for `-o/--output` completes directories relative to cwd.
 ### Dependencies
 - **yt-dlp**: Video metadata and download
 - **youtube-transcript-api**: Transcript extraction
-- **ffmpeg-python**: Frame extraction via ffmpeg
+- **ffmpeg**: Frame extraction (system binary, called via subprocess)
 - **click**: CLI interface
 - **python-dateutil**: Date parsing
 - **pyyaml**: YAML frontmatter generation
@@ -241,6 +241,7 @@ Completion for `-o/--output` completes directories relative to cwd.
 - `frames.py` - Frame extraction (ffmpeg, with deduplication)
 - `markdown.py` - Markdown file generation
 - `metadata.py` - VideoMetadataProtocol for polymorphic metadata handling
+- `titling.py` - AI title generation using Claude Haiku (optional)
 - `completion.py` - Bash completion script handling
 - `utils.py` - URL validation, YouTube URL extraction, and utility functions
 
@@ -285,6 +286,7 @@ Completed features:
 - ✅ Multiple video/playlist processing
 - ✅ Multi-URL clipboard extraction (plain, markdown, CSV, mixed text)
 - ✅ Clipboard preview table with metadata confirmation prompt
+- ✅ AI-generated titles using Claude Haiku (optional, with silent fallback)
 
 ## Future Considerations
 
