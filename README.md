@@ -14,6 +14,7 @@ Watching a lecture, tutorial, or presentation? **ytcapture** and **vidcapture** 
 - **Timestamped transcript segments** aligned to each frame
 - **Obsidian-ready format** with YAML frontmatter and `![[wikilink]]` embeds
 - **Smart deduplication** that removes redundant frames (great for slide-based content)
+- **AI-generated titles** using Claude Haiku for concise, informative filenames (optional)
 
 No more scrubbing through hour-long videos to find that one slide. Your notes become a visual index of the entire video.
 
@@ -40,6 +41,10 @@ uv tool install -e .
 
 # Or install with pip
 pip install -e .
+
+# Optional: install AI title generation support
+uv pip install "ytcapture[ai]"
+# or: pip install -e ".[ai]"
 ```
 
 ## Usage
@@ -158,6 +163,7 @@ dedup_threshold: 0.85  # 0.0-1.0, higher = more aggressive
 language: en
 prefer_manual: false
 keep_video: false
+ai_title: true         # Use Claude Haiku to generate concise titles
 
 # vidcapture-specific
 fast: false            # Use fast keyframe seeking
@@ -195,6 +201,7 @@ Tab completion for `-o/--output` is vault-aware (completes directories relative 
 | `--no-dedup` | - | Disable frame deduplication |
 | `--prefer-manual` | - | Only use manual transcripts |
 | `--keep-video` | - | Keep downloaded video file after frame extraction |
+| `--no-ai-title` | - | Disable AI title generation (see below) |
 | `-y, --yes` | - | Skip confirmation prompt for large batches (>10 videos) |
 | `-v, --verbose` | - | Verbose output |
 
@@ -211,6 +218,16 @@ Tab completion for `-o/--output` is vault-aware (completes directories relative 
 | `--fast` | - | Fast extraction using keyframe seeking (recommended for long videos) |
 | `--json` | - | Output JSON instead of console output (for scripting) |
 | `-v, --verbose` | - | Verbose output |
+
+## AI Title Generation
+
+YouTube titles are often long and SEO-stuffed. When enabled, ytcapture uses Claude Haiku to generate concise titles in `{Key Person} - {Descriptive Topic}` format (e.g., "Ilya Sutskever - Scaling Neural Networks").
+
+**Requirements:**
+- Install the `ai` extra: `uv pip install "ytcapture[ai]"` or `pip install anthropic`
+- Set `ANTHROPIC_API_KEY` in your environment
+
+When both are present, AI titling is used automatically. The original YouTube title is preserved in the `original_title` frontmatter field. To disable, use `--no-ai-title` or set `ai_title: false` in config. When the API key or SDK is missing, ytcapture falls back silently to the default truncated title.
 
 ## Tips
 
