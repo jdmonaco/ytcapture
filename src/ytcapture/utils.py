@@ -5,6 +5,13 @@ from urllib.parse import parse_qs, urlparse
 
 from dateutil import parser as date_parser
 
+# Regex to find YouTube URLs in arbitrary text. Matches http(s) YouTube domains
+# and consumes URL characters up to whitespace or common delimiters.
+_YOUTUBE_URL_RE = re.compile(
+    r'https?://(?:www\.|m\.)?(?:youtube\.com|youtu\.be)'
+    r'[^\s\)\]"\'>,]*'
+)
+
 
 def sanitize_title(title: str, max_length: int = 100) -> str:
     """Sanitize a title for use as a filename.
@@ -175,3 +182,27 @@ def is_playlist_url(url: str) -> bool:
     if extract_video_id(url) is not None:
         return False
     return extract_playlist_id(url) is not None
+
+
+def extract_youtube_urls(text: str) -> list[str]:
+    """Extract all YouTube video and playlist URLs from arbitrary text.
+
+    Finds YouTube URLs embedded in plain text, markdown links, CSV lines,
+    or any other format. Deduplicates while preserving order.
+
+    Args:
+        text: Arbitrary text that may contain YouTube URLs.
+
+    Returns:
+        List of unique YouTube URLs found in the text.
+    """
+    seen: set[str] = set()
+    urls: list[str] = []
+    for match in _YOUTUBE_URL_RE.finditer(text):
+        url = match.group(0)
+        if url in seen:
+            continue
+        if is_video_url(url) or is_playlist_url(url):
+            seen.add(url)
+            urls.append(url)
+    return urls

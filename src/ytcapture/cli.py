@@ -9,6 +9,7 @@ from typing import Callable, TypeVar
 
 import click
 from rich.console import Console
+from rich.table import Table
 
 from ytcapture import __version__
 from ytcapture.config import (
@@ -24,7 +25,7 @@ from ytcapture.frames import FrameExtractionError, extract_frames_fast, extract_
 from ytcapture.local import LocalVideoError, LocalVideoMetadata, get_local_video_metadata
 from ytcapture.markdown import generate_markdown_file, generate_markdown_filename
 from ytcapture.transcript import TranscriptSegment, get_transcript, save_transcript_json
-from ytcapture.utils import is_playlist_url, is_video_url
+from ytcapture.utils import extract_youtube_urls, is_playlist_url, is_video_url
 from ytcapture.video import (
     VideoError,
     VideoMetadata,
@@ -38,16 +39,20 @@ F = TypeVar('F', bound=Callable[..., None])
 console = Console()
 
 
-def get_clipboard_url() -> str | None:
-    """Check clipboard for a YouTube URL (macOS only).
+def get_clipboard_urls() -> list[str]:
+    """Check clipboard for YouTube URLs (macOS only).
 
-    Returns video or playlist URL from clipboard, or None if not found/available.
+    Extracts all YouTube video and playlist URLs from clipboard text,
+    supporting plain URLs, markdown links, CSV, and mixed text formats.
+
+    Returns:
+        List of YouTube URLs found in clipboard, empty if none/unavailable.
     """
     if platform.system() != 'Darwin':
-        return None
+        return []
 
     if shutil.which('pbpaste') is None:
-        return None
+        return []
 
     try:
         result = subprocess.run(
@@ -57,15 +62,53 @@ def get_clipboard_url() -> str | None:
             timeout=5,
         )
         clipboard = result.stdout.strip()
+        if not clipboard:
+            return []
 
-        # Check if it looks like a YouTube video or playlist URL
-        if clipboard and (is_video_url(clipboard) or is_playlist_url(clipboard)):
-            return clipboard
+        return extract_youtube_urls(clipboard)
 
     except Exception:
-        pass
+        return []
 
-    return None
+
+def confirm_clipboard_urls(video_urls: list[str], con: Console) -> bool:
+    """Show a preview table of clipboard URLs and prompt for confirmation.
+
+    Fetches metadata for each URL and displays a Rich table with title,
+    channel, and duration before proceeding.
+
+    Args:
+        video_urls: List of YouTube video URLs to preview.
+        con: Rich Console instance for output.
+
+    Returns:
+        True if user confirms, False otherwise.
+    """
+    from ytcapture.utils import format_timestamp
+
+    table = Table(title="Clipboard URLs")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Title", style="bold")
+    table.add_column("Channel")
+    table.add_column("Duration", justify="right")
+
+    with con.status("[bold blue]Fetching video metadata...", spinner="dots"):
+        for i, url in enumerate(video_urls, 1):
+            try:
+                metadata = get_video_metadata(url)
+                table.add_row(
+                    str(i),
+                    metadata.title,
+                    metadata.channel,
+                    format_timestamp(metadata.duration),
+                )
+            except VideoError:
+                table.add_row(str(i), "(metadata unavailable)", url, "")
+
+    con.print()
+    con.print(table)
+    con.print()
+    return click.confirm("Proceed with capture?", default=True)
 
 
 def format_markdown(filepath: Path) -> bool:
@@ -370,7 +413,7 @@ def process_video(
 @click.option(
     '-y', '--yes',
     is_flag=True,
-    help='Skip confirmation prompt for large batches (>10 videos)',
+    help='Skip confirmation prompts (clipboard preview, large batches)',
 )
 @click.option(
     '-v', '--verbose',
@@ -412,11 +455,16 @@ def main(
 
     # 1. Collect URLs from arguments and/or clipboard
     url_list = list(urls)
+    from_clipboard = False
     if not url_list:
-        clipboard_url = get_clipboard_url()
-        if clipboard_url:
-            console.print(f"[dim]Using URL from clipboard:[/] {clipboard_url}")
-            url_list = [clipboard_url]
+        clipboard_urls = get_clipboard_urls()
+        if clipboard_urls:
+            from_clipboard = True
+            url_list = clipboard_urls
+            if len(url_list) == 1:
+                console.print(f"[dim]Using URL from clipboard:[/] {url_list[0]}")
+            else:
+                console.print(f"[dim]Found {len(url_list)} URLs from clipboard[/]")
         else:
             raise click.ClickException(
                 "No URLs provided. Pass YouTube URLs as arguments or copy one to clipboard."
@@ -463,13 +511,18 @@ def main(
             unique_urls.append(url)
     video_urls = unique_urls
 
-    # 5. Confirm if >10 videos (unless -y/--yes)
+    # 5. Confirm clipboard URLs (unless -y/--yes)
+    if from_clipboard and not yes:
+        if not confirm_clipboard_urls(video_urls, console):
+            raise click.ClickException("Cancelled by user.")
+
+    # 6. Confirm if >10 videos (unless -y/--yes)
     if len(video_urls) > 10 and not yes:
         console.print(f"\n[bold]Found {len(video_urls)} videos to process.[/]")
         if not click.confirm("Continue?", default=True):
             raise click.ClickException("Cancelled by user.")
 
-    # 6. Process each video
+    # 7. Process each video
     console.print(f"\n[bold]Processing {len(video_urls)} video(s)...[/]\n")
 
     success_count = 0
@@ -496,7 +549,7 @@ def main(
             console.print(f"[red]✗[/] Failed: {e}")
             error_count += 1
 
-    # 7. Summary
+    # 8. Summary
     if error_count > 0:
         console.print(
             f"\n[bold yellow]Complete![/] {success_count} succeeded, {error_count} failed"
