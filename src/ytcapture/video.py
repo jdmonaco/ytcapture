@@ -22,6 +22,7 @@ class VideoMetadata:
     upload_date: str
     description: str
     duration: float
+    _original_title: str = ""
 
     @property
     def identifier(self) -> str:

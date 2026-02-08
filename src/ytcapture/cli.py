@@ -235,6 +235,7 @@ def process_video(
     dedup_threshold: float,
     no_dedup: bool,
     keep_video: bool,
+    no_ai_title: bool = False,
 ) -> Path:
     """Process a single video URL.
 
@@ -249,6 +250,7 @@ def process_video(
         dedup_threshold: Similarity threshold for frame deduplication.
         no_dedup: Disable frame deduplication.
         keep_video: Keep downloaded video file.
+        no_ai_title: Skip AI title generation.
 
     Returns:
         Path to the generated markdown file.
@@ -264,6 +266,22 @@ def process_video(
     console.print("[green]✓[/] Fetched video metadata")
     console.print(f"  [dim]Title:[/] {metadata.title}")
     console.print(f"  [dim]Channel:[/] {metadata.channel}")
+
+    # 1b. AI title generation
+    if not no_ai_title:
+        from ytcapture.titling import generate_ai_title, is_ai_titling_available
+
+        if is_ai_titling_available():
+            with console.status("[bold blue]Generating AI title...", spinner="dots"):
+                result = generate_ai_title(
+                    title=metadata.title,
+                    channel=metadata.channel,
+                    description=metadata.description,
+                )
+            if result.used_ai:
+                metadata._original_title = result.original_title
+                metadata.title = result.ai_title
+                console.print(f"[green]✓[/] AI title: {metadata.title}")
 
     # 2. Create directory structure
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -411,6 +429,12 @@ def process_video(
     help='Keep downloaded video file after frame extraction',
 )
 @click.option(
+    '--no-ai-title',
+    is_flag=True,
+    default=not _cfg.get("ai_title", True),
+    help='Disable AI title generation (requires anthropic SDK and ANTHROPIC_API_KEY)',
+)
+@click.option(
     '-y', '--yes',
     is_flag=True,
     help='Skip confirmation prompts (clipboard preview, large batches)',
@@ -431,6 +455,7 @@ def main(
     dedup_threshold: float,
     no_dedup: bool,
     keep_video: bool,
+    no_ai_title: bool,
     yes: bool,
     verbose: bool,
 ) -> None:
@@ -542,6 +567,7 @@ def main(
                 dedup_threshold,
                 no_dedup,
                 keep_video,
+                no_ai_title,
             )
             console.print(f"[green]✓[/] {md_file.name}")
             success_count += 1

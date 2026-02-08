@@ -19,6 +19,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "language": "en",
     "prefer_manual": False,
     "keep_video": False,
+    "ai_title": True,
     # vidcapture-specific
     "fast": False,
 }
@@ -48,6 +49,7 @@ dedup_threshold: 0.85  # 0.0-1.0, higher = more aggressive dedup [0.85]
 language: en           # Transcript language code [en]
 prefer_manual: false   # Only use manual transcripts [false]
 keep_video: false      # Keep downloaded video file [false]
+ai_title: true         # Use AI (Claude Haiku) to generate concise titles [true]
 
 # vidcapture-specific defaults (local video processing)
 fast: false            # Use fast keyframe seeking [false]

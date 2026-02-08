@@ -85,6 +85,10 @@ def generate_frontmatter(
     if metadata.author:
         frontmatter['author'] = [metadata.author]
 
+    # Add original_title when AI title was used
+    if hasattr(metadata, '_original_title') and metadata._original_title and metadata._original_title != metadata.title:
+        frontmatter['original_title'] = metadata._original_title
+
     # Add optional description (truncated)
     if metadata.description:
         description = metadata.description
@@ -174,7 +178,7 @@ def generate_markdown_filename(metadata: VideoMetadataProtocol) -> str:
     Returns:
         Filename string (without directory path).
     """
-    short_title = sanitize_title(truncate_title_words(metadata.title, 6))
+    short_title = sanitize_title(truncate_title_words(metadata.title, 10))
     date_str = metadata.source_date  # YYYYMMDD format
 
     if metadata.author:

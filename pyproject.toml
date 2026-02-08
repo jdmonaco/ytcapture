@@ -33,6 +33,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ai = ["anthropic>=0.40.0"]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -113,5 +114,6 @@ module = [
     "youtube_transcript_api.*",
     "ffmpeg.*",
     "imagehash.*",
+    "anthropic.*",
 ]
 ignore_missing_imports = true
