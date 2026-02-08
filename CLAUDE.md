@@ -107,7 +107,8 @@ ytcapture "https://youtube.com/watch?v=..."
 # Multiple videos or playlists
 ytcapture URL1 URL2 "https://youtube.com/playlist?list=..."
 
-# On macOS, reads URL from clipboard if no arguments
+# On macOS, reads URLs from clipboard if no arguments
+# Supports plain URLs, markdown links, CSV, mixed text
 ytcapture
 
 # Specify output directory (relative to cwd or absolute)
@@ -124,6 +125,9 @@ ytcapture URL --prefer-manual         # Manual only (fail if unavailable)
 
 # Keep downloaded video file
 ytcapture URL --keep-video
+
+# Skip confirmation prompts (clipboard preview, large batches)
+ytcapture -y
 ```
 
 ### vidcapture (local files)
@@ -238,7 +242,7 @@ Completion for `-o/--output` completes directories relative to cwd.
 - `markdown.py` - Markdown file generation
 - `metadata.py` - VideoMetadataProtocol for polymorphic metadata handling
 - `completion.py` - Bash completion script handling
-- `utils.py` - URL validation and utility functions
+- `utils.py` - URL validation, YouTube URL extraction, and utility functions
 
 ### Key Design Patterns
 
@@ -279,6 +283,8 @@ Completed features:
 - ✅ Bash completion with standard directory completion
 - ✅ JSON output mode for vidcapture
 - ✅ Multiple video/playlist processing
+- ✅ Multi-URL clipboard extraction (plain, markdown, CSV, mixed text)
+- ✅ Clipboard preview table with metadata confirmation prompt
 
 ## Future Considerations
 
