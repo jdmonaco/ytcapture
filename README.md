@@ -39,12 +39,12 @@ cd ytcapture
 # Install as a CLI tool with uv (recommended)
 uv tool install -e .
 
+# Or include AI title generation support (requires ANTHROPIC_API_KEY)
+uv tool install -e ".[ai]"
+
 # Or install with pip
 pip install -e .
-
-# Optional: install AI title generation support
-uv pip install "ytcapture[ai]"
-# or: pip install -e ".[ai]"
+# pip install -e ".[ai]"  # with AI titling
 ```
 
 ## Usage
