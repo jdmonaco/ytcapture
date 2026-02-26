@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from ytcapture.frames import FrameInfo
+from ytcapture.local import LocalVideoMetadata
 from ytcapture.metadata import VideoMetadataProtocol
 from ytcapture.transcript import TranscriptSegment
 from ytcapture.utils import format_date, format_timestamp, sanitize_title, truncate_title_words
@@ -188,6 +189,23 @@ def generate_markdown_filename(metadata: VideoMetadataProtocol) -> str:
         return f'{short_title} {date_str}.md'
 
 
+def generate_local_markdown_filename(metadata: LocalVideoMetadata) -> str:
+    """Generate markdown filename for local video files.
+
+    Uses the original input filename stem with .md extension.
+
+    Args:
+        metadata: LocalVideoMetadata object.
+
+    Returns:
+        Filename string (without directory path).
+    """
+    stem = metadata.file_path.stem
+    if metadata._identifier_suffix > 0:
+        return f'{stem}-{metadata._identifier_suffix}.md'
+    return f'{stem}.md'
+
+
 def generate_markdown_file(
     metadata: VideoMetadataProtocol,
     url: str | None,
@@ -195,6 +213,7 @@ def generate_markdown_file(
     frames: list[FrameInfo],
     output_dir: Path,
     video_path: Path | None = None,
+    filename: str | None = None,
 ) -> Path:
     """Generate complete markdown file.
 
@@ -205,6 +224,7 @@ def generate_markdown_file(
         frames: List of frame info objects.
         output_dir: Directory to save the markdown file.
         video_path: Path to saved video file (if --keep-video was used).
+        filename: Override filename. If None, uses generate_markdown_filename().
 
     Returns:
         Path to the generated markdown file.
@@ -245,7 +265,8 @@ def generate_markdown_file(
     content = frontmatter + title_heading + video_embed + description_section + body
 
     # Generate filename
-    filename = generate_markdown_filename(metadata)
+    if filename is None:
+        filename = generate_markdown_filename(metadata)
 
     filepath = output_dir / filename
     filepath.write_text(content, encoding='utf-8')

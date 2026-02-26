@@ -34,15 +34,24 @@ Given local video file paths, the tool:
 
 ## Output Structure
 
+### ytcapture (YouTube)
 ```
-<Sanitized Video Title>/
-├── images/                          # or frames/
+<output_dir>/
+├── images/<video_id>/
 │   ├── frame-0001.jpg
-│   ├── frame-0002.jpg
 │   └── ...
-├── transcript/
-│   └── raw-transcript.json          # Raw transcript data
-└── <Sanitized Video Title> YYYYMMDD.md
+├── transcripts/
+│   └── raw-transcript-<video_id>.json
+└── <Sanitized Title> (<Author>) YYYYMMDD.md
+```
+
+### vidcapture (local files)
+```
+<output_dir>/
+├── images/<filename_stem>/
+│   ├── frame-0001.jpg
+│   └── ...
+└── <filename_stem>.md
 ```
 
 ## Markdown Output Format

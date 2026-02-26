@@ -23,7 +23,7 @@ from ytcapture.config import (
 _cfg = get_config_for_defaults()
 from ytcapture.frames import FrameExtractionError, extract_frames_fast, extract_frames_from_file
 from ytcapture.local import LocalVideoError, LocalVideoMetadata, get_local_video_metadata
-from ytcapture.markdown import generate_markdown_file, generate_markdown_filename
+from ytcapture.markdown import generate_local_markdown_filename, generate_markdown_file, generate_markdown_filename
 from ytcapture.transcript import TranscriptSegment, get_transcript, save_transcript_json
 from ytcapture.utils import extract_youtube_urls, is_playlist_url, is_video_url
 from ytcapture.video import (
@@ -629,7 +629,7 @@ def process_local_video(
     out_console.print(f"  [dim]Duration:[/] {metadata.duration:.1f}s")
 
     # Check if output file already exists
-    md_filename = generate_markdown_filename(metadata)
+    md_filename = generate_local_markdown_filename(metadata)
     md_filepath = output_dir / md_filename
     if md_filepath.exists() and not force:
         if json_output:
@@ -689,6 +689,7 @@ def process_local_video(
             frames=frames,
             output_dir=output_dir,
             video_path=None,  # Don't embed video
+            filename=md_filename,
         )
 
     out_console.print("[green]✓[/] Generated markdown")
