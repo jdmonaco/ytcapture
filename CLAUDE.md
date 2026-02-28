@@ -148,8 +148,8 @@ vidcapture meeting.mp4
 # Multiple files
 vidcapture video1.mp4 video2.mkv -o notes/
 
-# Fast mode for long videos (uses keyframe seeking)
-vidcapture long-workshop.mp4 --fast --interval 60
+# Full-decode mode for accurate timestamps (fast keyframe seeking is the default)
+vidcapture long-workshop.mp4 --no-fast --interval 60
 
 # JSON output for scripting
 vidcapture video.mp4 --json
