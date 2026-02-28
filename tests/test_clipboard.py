@@ -179,14 +179,14 @@ class TestGetClipboardUrls:
 
 
 class TestConfirmClipboardUrls:
-    """Tests for confirm_clipboard_urls()."""
+    """Tests for preview_urls() with clipboard source."""
 
     @patch("ytcapture.cli.click.confirm", return_value=True)
     @patch("ytcapture.cli.get_video_metadata")
     def test_confirm_accepted(self, mock_metadata, mock_confirm):
         from rich.console import Console
 
-        from ytcapture.cli import confirm_clipboard_urls
+        from ytcapture.cli import preview_urls
         from ytcapture.video import VideoMetadata
 
         mock_metadata.return_value = VideoMetadata(
@@ -198,8 +198,8 @@ class TestConfirmClipboardUrls:
             duration=120.0,
         )
         con = Console(quiet=True)
-        result = confirm_clipboard_urls(
-            ["https://www.youtube.com/watch?v=abc123"], con
+        result = preview_urls(
+            ["https://www.youtube.com/watch?v=abc123"], con, source="clipboard"
         )
         assert result is True
         mock_confirm.assert_called_once_with("Proceed with capture?", default=True)
@@ -209,7 +209,7 @@ class TestConfirmClipboardUrls:
     def test_confirm_rejected(self, mock_metadata, mock_confirm):
         from rich.console import Console
 
-        from ytcapture.cli import confirm_clipboard_urls
+        from ytcapture.cli import preview_urls
         from ytcapture.video import VideoMetadata
 
         mock_metadata.return_value = VideoMetadata(
@@ -221,8 +221,8 @@ class TestConfirmClipboardUrls:
             duration=120.0,
         )
         con = Console(quiet=True)
-        result = confirm_clipboard_urls(
-            ["https://www.youtube.com/watch?v=abc123"], con
+        result = preview_urls(
+            ["https://www.youtube.com/watch?v=abc123"], con, source="clipboard"
         )
         assert result is False
 
@@ -231,13 +231,13 @@ class TestConfirmClipboardUrls:
     def test_metadata_unavailable(self, mock_metadata, mock_confirm):
         from rich.console import Console
 
-        from ytcapture.cli import confirm_clipboard_urls
+        from ytcapture.cli import preview_urls
         from ytcapture.video import VideoError
 
         mock_metadata.side_effect = VideoError("not found")
         con = Console(quiet=True)
-        result = confirm_clipboard_urls(
-            ["https://www.youtube.com/watch?v=abc123"], con
+        result = preview_urls(
+            ["https://www.youtube.com/watch?v=abc123"], con, source="clipboard"
         )
         assert result is True
 
@@ -246,7 +246,7 @@ class TestConfirmClipboardUrls:
     def test_multiple_urls(self, mock_metadata, mock_confirm):
         from rich.console import Console
 
-        from ytcapture.cli import confirm_clipboard_urls
+        from ytcapture.cli import preview_urls
         from ytcapture.video import VideoMetadata
 
         mock_metadata.return_value = VideoMetadata(
@@ -263,6 +263,6 @@ class TestConfirmClipboardUrls:
             "https://www.youtube.com/watch?v=def456",
             "https://www.youtube.com/watch?v=ghi789",
         ]
-        result = confirm_clipboard_urls(urls, con)
+        result = preview_urls(urls, con, source="clipboard")
         assert result is True
         assert mock_metadata.call_count == 3

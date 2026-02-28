@@ -71,22 +71,25 @@ def get_clipboard_urls() -> list[str]:
         return []
 
 
-def confirm_clipboard_urls(video_urls: list[str], con: Console) -> bool:
-    """Show a preview table of clipboard URLs and prompt for confirmation.
+def preview_urls(video_urls: list[str], con: Console, source: str = "clipboard") -> bool:
+    """Show a preview table of video URLs and optionally prompt for confirmation.
 
     Fetches metadata for each URL and displays a Rich table with title,
-    channel, and duration before proceeding.
+    channel, and duration. For clipboard-sourced URLs, prompts for
+    confirmation; for CLI arg-sourced URLs, displays the table only.
 
     Args:
         video_urls: List of YouTube video URLs to preview.
         con: Rich Console instance for output.
+        source: Input source — "clipboard" (show table + confirm) or "args" (show table only).
 
     Returns:
-        True if user confirms, False otherwise.
+        True to proceed, False to cancel (only possible for clipboard source).
     """
     from ytcapture.utils import format_timestamp
 
-    table = Table(title="Clipboard URLs")
+    title = "Clipboard URLs" if source == "clipboard" else "Input URLs"
+    table = Table(title=title)
     table.add_column("#", justify="right", style="dim")
     table.add_column("Title", style="bold")
     table.add_column("Channel")
@@ -108,7 +111,10 @@ def confirm_clipboard_urls(video_urls: list[str], con: Console) -> bool:
     con.print()
     con.print(table)
     con.print()
-    return click.confirm("Proceed with capture?", default=True)
+
+    if source == "clipboard":
+        return click.confirm("Proceed with capture?", default=True)
+    return True
 
 
 def format_markdown(filepath: Path) -> bool:
@@ -536,9 +542,9 @@ def main(
             unique_urls.append(url)
     video_urls = unique_urls
 
-    # 5. Confirm clipboard URLs (unless -y/--yes)
-    if from_clipboard and not yes:
-        if not confirm_clipboard_urls(video_urls, console):
+    # 5. Preview URLs (multi-URL: always show table; clipboard: also confirm)
+    if len(video_urls) > 1 and not yes:
+        if not preview_urls(video_urls, console, source="clipboard" if from_clipboard else "args"):
             raise click.ClickException("Cancelled by user.")
 
     # 6. Confirm if >10 videos (unless -y/--yes)
