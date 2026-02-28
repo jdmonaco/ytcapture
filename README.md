@@ -52,7 +52,7 @@ pip install -e .
 ### ytcapture (YouTube videos)
 
 ```bash
-# Basic usage - outputs to vault root (or current directory)
+# Basic usage - outputs to current directory
 ytcapture "https://www.youtube.com/watch?v=VIDEO_ID"
 
 # Multiple videos at once
@@ -67,7 +67,7 @@ ytcapture
 # Skip confirmation for large playlists (>10 videos)
 ytcapture "https://www.youtube.com/playlist?list=PLAYLIST_ID" -y
 
-# Specify output directory (vault-relative unless absolute path)
+# Specify output directory (relative to cwd or absolute path)
 ytcapture URL -o my-notes/
 
 # Adjust frame interval (default: 15 seconds)
@@ -86,8 +86,8 @@ vidcapture meeting.mp4
 # Multiple files
 vidcapture video1.mp4 video2.mkv -o notes/
 
-# Fast mode for long videos (uses keyframe seeking, less accurate timestamps)
-vidcapture long-workshop.mp4 --fast --interval 60
+# Full-decode mode for accurate timestamps (fast keyframe seeking is the default)
+vidcapture long-workshop.mp4 --no-fast --interval 60
 
 # JSON output for scripting
 vidcapture video.mp4 --json
@@ -148,12 +148,6 @@ Let's start by understanding what a neuron is and how it processes information.
 Both tools use a shared config file at `~/.ytcapture.yml` (auto-created on first run):
 
 ```yaml
-# Vault root directory - relative paths in --output are relative to this
-vault: ~/Documents/Obsidian/Notes
-
-# Default output directory (vault-relative)
-# output: Inbox/VideoCaptures
-
 # Frame extraction defaults
 interval: 15           # Seconds between frames
 frame_format: jpg      # jpg or png
@@ -166,7 +160,7 @@ keep_video: false
 ai_title: true         # Use Claude Haiku to generate concise titles
 
 # vidcapture-specific
-fast: false            # Use fast keyframe seeking
+fast: true             # Use fast keyframe seeking (--no-fast for full decode)
 ```
 
 CLI options override config values. The `--help` output shows your current defaults from config.
@@ -184,7 +178,7 @@ vidcapture completion bash --install
 source ~/.bashrc
 ```
 
-Tab completion for `-o/--output` is vault-aware (completes directories relative to your vault).
+Tab completion for `-o/--output` completes directories relative to the current directory.
 
 ## Options
 
@@ -192,7 +186,7 @@ Tab completion for `-o/--output` is vault-aware (completes directories relative 
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-o, --output` | vault root | Output directory (vault-relative unless absolute) |
+| `-o, --output` | cwd | Output directory (relative to cwd or absolute) |
 | `--interval` | 15 | Frame extraction interval in seconds |
 | `--max-frames` | None | Maximum number of frames to extract |
 | `--frame-format` | jpg | Frame format: `jpg` or `png` |
@@ -209,14 +203,15 @@ Tab completion for `-o/--output` is vault-aware (completes directories relative 
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-o, --output` | vault root | Output directory (vault-relative unless absolute) |
+| `-o, --output` | cwd | Output directory (relative to cwd or absolute) |
 | `--interval` | 15 | Frame extraction interval in seconds |
 | `--max-frames` | None | Maximum number of frames to extract |
 | `--frame-format` | jpg | Frame format: `jpg` or `png` |
 | `--dedup-threshold` | 0.85 | Similarity threshold for removing duplicate frames (0.0-1.0) |
 | `--no-dedup` | - | Disable frame deduplication |
-| `--fast` | - | Fast extraction using keyframe seeking (recommended for long videos) |
+| `--fast / --no-fast` | True | Fast keyframe seeking (use `--no-fast` for full decode) |
 | `--json` | - | Output JSON instead of console output (for scripting) |
+| `-f, --force` | - | Overwrite existing output files without prompting |
 | `-v, --verbose` | - | Verbose output |
 
 ## AI Title Generation

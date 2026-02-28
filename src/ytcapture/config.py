@@ -1,6 +1,5 @@
 """Configuration file handling for ytcapture/vidcapture."""
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +8,6 @@ import yaml
 
 # Default configuration values
 DEFAULT_CONFIG: dict[str, Any] = {
-    "vault": ".",
-    "output": None,
     "interval": 15,
     "max_frames": None,
     "frame_format": "jpg",
@@ -21,7 +18,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "keep_video": False,
     "ai_title": True,
     # vidcapture-specific
-    "fast": False,
+    "fast": True,
 }
 
 # Default config file content
@@ -31,13 +28,6 @@ DEFAULT_CONFIG_YAML = """\
 #
 # Settings can be removed or commented out to use built-in defaults.
 # Built-in defaults are noted in [brackets] for each setting.
-
-# Vault root directory (~ expanded, used for path display shortening)
-vault: .  # [.]
-
-# Default output directory (relative to cwd or absolute path)
-# If set, used when --output is not specified on command line
-# output: VideoCaptures  # [none - uses cwd]
 
 # Frame extraction defaults
 interval: 15           # Seconds between frames [15]
@@ -52,7 +42,7 @@ keep_video: false      # Keep downloaded video file [false]
 ai_title: true         # Use AI (Claude Haiku) to generate concise titles [true]
 
 # vidcapture-specific defaults (local video processing)
-fast: false            # Use fast keyframe seeking [false]
+fast: true             # Use fast keyframe seeking [true]
 """
 
 
@@ -105,10 +95,6 @@ def load_config(path: Path | None = None) -> tuple[dict[str, Any], bool]:
 
     # Merge file config into defaults
     config = _merge_dicts(config, file_config)
-
-    # Expand vault path (both ~ and environment variables like $HOME)
-    if "vault" in config and config["vault"]:
-        config["vault"] = os.path.expandvars(str(Path(config["vault"]).expanduser()))
 
     return config, was_created
 
@@ -191,12 +177,6 @@ def get_config_for_defaults() -> dict[str, Any]:
             except (yaml.YAMLError, OSError):
                 # On error, just use defaults
                 pass
-
-        # Expand vault path (both ~ and environment variables like $HOME)
-        if _cached_config.get("vault"):
-            _cached_config["vault"] = os.path.expandvars(
-                str(Path(_cached_config["vault"]).expanduser())
-            )
 
     return _cached_config
 

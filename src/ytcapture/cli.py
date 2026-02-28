@@ -504,8 +504,6 @@ def main(
     # 2. Determine output directory
     if output:
         output_dir = resolve_output_path(output)
-    elif _cfg.get("output"):
-        output_dir = resolve_output_path(_cfg["output"])
     else:
         output_dir = Path.cwd()
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -721,10 +719,10 @@ def process_local_video(
 @click.version_option(version=__version__)
 @common_frame_options
 @click.option(
-    '--fast',
-    is_flag=True,
-    default=_cfg.get("fast", False),
-    help='Fast extraction using keyframe seeking (recommended for long videos)',
+    '--fast/--no-fast',
+    default=_cfg.get("fast", True),
+    show_default=True,
+    help='Use fast keyframe seeking (--no-fast for full decode)',
 )
 @click.option(
     '--json',
@@ -762,7 +760,7 @@ def vidcapture_main(
         vidcapture meeting.mp4
         vidcapture video1.mp4 video2.mkv -o notes/
         vidcapture recording.mov --interval 30 --max-frames 50
-        vidcapture long-workshop.mp4 --fast --interval 60
+        vidcapture long-workshop.mp4 --no-fast --interval 60
     """
     # Use quiet console for JSON output
     out_console = Console(quiet=True) if json_output else console
@@ -782,8 +780,6 @@ def vidcapture_main(
     # Determine output directory
     if output:
         output_dir = resolve_output_path(output)
-    elif _cfg.get("output"):
-        output_dir = resolve_output_path(_cfg["output"])
     else:
         output_dir = Path.cwd()
         output_dir.mkdir(parents=True, exist_ok=True)

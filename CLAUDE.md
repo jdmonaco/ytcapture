@@ -160,12 +160,6 @@ vidcapture video.mp4 --json
 Both tools use a shared config file at `~/.ytcapture.yml` (auto-created on first run).
 
 ```yaml
-# Vault root directory (~ expanded, used for path display shortening)
-vault: ~/Documents/Obsidian/Notes
-
-# Default output directory (relative to cwd or absolute)
-output: VideoCaptures
-
 # Frame extraction defaults
 interval: 15           # Seconds between frames
 frame_format: jpg      # jpg or png
@@ -175,9 +169,10 @@ dedup_threshold: 0.85  # 0.0-1.0
 language: en
 prefer_manual: false
 keep_video: false
+ai_title: true
 
 # vidcapture-specific
-fast: false
+fast: true             # Use fast keyframe seeking (--no-fast for full decode)
 ```
 
 CLI options override config values. Help text shows current defaults from config.
@@ -288,7 +283,7 @@ Completed features:
 - ✅ Handle missing transcripts gracefully
 - ✅ Smart frame deduplication
 - ✅ Fast keyframe-seeking mode for long videos
-- ✅ Global configuration file with vault support
+- ✅ Global configuration file (~/.ytcapture.yml)
 - ✅ Cwd-relative path handling for -o/--output
 - ✅ Bash completion with standard directory completion
 - ✅ JSON output mode for vidcapture
