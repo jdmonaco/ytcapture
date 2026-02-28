@@ -378,7 +378,6 @@ def process_video(
 
 @click.command(context_settings={'help_option_names': ['-h', '--help']})
 @click.argument('urls', nargs=-1)
-@click.version_option(version=__version__)
 @click.option(
     '-o', '--output',
     type=click.Path(),
@@ -450,6 +449,7 @@ def process_video(
     is_flag=True,
     help='Verbose output',
 )
+@click.version_option(version=__version__)
 def main(
     urls: tuple[str, ...],
     output: str | None,
@@ -716,7 +716,6 @@ def process_local_video(
 
 @click.command(context_settings={'help_option_names': ['-h', '--help']})
 @click.argument('files', nargs=-1, type=click.Path(exists=True))
-@click.version_option(version=__version__)
 @common_frame_options
 @click.option(
     '--fast/--no-fast',
@@ -735,6 +734,7 @@ def process_local_video(
     is_flag=True,
     help='Overwrite existing output files without prompting',
 )
+@click.version_option(version=__version__)
 def vidcapture_main(
     files: tuple[str, ...],
     output: str | None,
