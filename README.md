@@ -1,3 +1,5 @@
+> **Archived**: This project has been merged into [vidflow](../vidflow). Install vidflow to get `ytcapture`, `vidcapture`, `vidscribe`, and `vidflow` commands from a single package. This repo is preserved for reference only.
+
 # ytcapture
 
 Extract video frames and transcripts into Obsidian-compatible markdown notes.
